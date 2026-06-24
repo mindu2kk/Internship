@@ -96,6 +96,13 @@ temp/
 
 # Local helper scripts that are not part of the canonical GitHub workflow
 *.bat
+start.sh
+stop.sh
+
+# Optional deployment/build helpers not needed in the submitted SourceCode tree
+Dockerfile.*
+docker-compose.yml
+Makefile
 
 # Data files that are local, raw, or too large for normal Git history
 data/product_catalog_raw.xlsx
