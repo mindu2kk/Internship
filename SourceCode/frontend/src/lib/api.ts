@@ -10,21 +10,25 @@ export async function sendChatMessage(
   history: ChatMessage[] = [],
   conversationState: ConversationState | null = null,
 ): Promise<ChatResponse> {
-  const response = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message,
-      history: history.slice(-12).map((turn) => ({
-        role: turn.role,
-        text: turn.text,
-        product_codes: turn.products?.map((product) => product.code) ?? [],
-      })),
-      conversation_state: conversationState,
-    }),
-  })
-  if (!response.ok) throw new Error('Không thể kết nối với hệ thống AI lúc này.')
-  return response.json() as Promise<ChatResponse>
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message,
+        history: history.slice(-12).map((turn) => ({
+          role: turn.role,
+          text: turn.text,
+          product_codes: turn.products?.map((product) => product.code) ?? [],
+        })),
+        conversation_state: conversationState,
+      }),
+    })
+    if (!response.ok) throw new Error('Không thể kết nối với hệ thống AI lúc này.')
+    return response.json() as Promise<ChatResponse>
+  } catch {
+    throw new Error('Không thể kết nối với hệ thống AI lúc này.')
+  }
 }
 
 export async function getFeaturedProducts(limit = 6): Promise<Product[]> {

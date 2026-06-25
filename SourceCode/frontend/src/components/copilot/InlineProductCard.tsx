@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ArrowUpRight, Plus, ShoppingBag } from 'lucide-react'
 import { useCommerceStore } from '@/stores/commerceStore'
 import type { Product } from '@/types/commerce'
@@ -12,6 +13,7 @@ function summarizeSpecs(product: Product) {
 }
 
 export function InlineProductCard({ product }: { product: Product }) {
+  const [imageFailed, setImageFailed] = useState(false)
   const addToCart = useCommerceStore((s) => s.addToCart)
   const openProduct = useCommerceStore((s) => s.openProduct)
 
@@ -22,8 +24,8 @@ export function InlineProductCard({ product }: { product: Product }) {
         onClick={() => openProduct(product)}
         aria-label={`Xem ${product.name}`}
       >
-        {product.image_url ? (
-          <img src={product.image_url} alt={product.name} />
+        {product.image_url && !imageFailed ? (
+          <img src={product.image_url} alt={product.name} onError={() => setImageFailed(true)} />
         ) : (
           <ShoppingBag size={18} strokeWidth={1.2} style={{ color: '#CBD5E1' }} />
         )}

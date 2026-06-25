@@ -3,6 +3,19 @@ import { Fragment, type ReactNode } from 'react'
 type TextBlock =
   | { type: 'paragraph'; text: string }
   | { type: 'list'; items: string[][] }
+  | { type: 'table'; headers: string[]; rows: string[][] }
+
+function parseTableRow(line: string): string[] {
+  return line
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim())
+}
+
+function isTableSeparator(line: string): boolean {
+  return /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(line.trim())
+}
 
 function parseText(text: string): TextBlock[] {
   const blocks: TextBlock[] = []
@@ -16,8 +29,27 @@ function parseText(text: string): TextBlock[] {
     }
   }
 
-  for (const rawLine of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index]
     const line = rawLine.trimEnd()
+    const nextLine = lines[index + 1]?.trimEnd() ?? ''
+    if (line.trim().startsWith('|') && isTableSeparator(nextLine)) {
+      flushList()
+      const headers = parseTableRow(line)
+      const rows: string[][] = []
+      let cursor = index + 2
+      while (cursor < lines.length && lines[cursor].trim().startsWith('|')) {
+        rows.push(parseTableRow(lines[cursor]))
+        cursor += 1
+      }
+      blocks.push({ type: 'table', headers, rows })
+      index = cursor - 1
+      continue
+    }
+    if (!line.trim()) {
+      flushList()
+      continue
+    }
     if (line.startsWith('- ')) {
       listItems.push([line.slice(2).trim()])
       continue
@@ -64,6 +96,27 @@ export function ChatMessageText({ text }: { text: string }) {
       {parseText(text).map((block, index) =>
         block.type === 'paragraph' ? (
           <p key={`${block.text}-${index}`}>{renderInline(block.text)}</p>
+        ) : block.type === 'table' ? (
+          <div className="chat-comparison-table-wrap" key={`table-${index}`}>
+            <table className="chat-comparison-table">
+              <thead>
+                <tr>
+                  {block.headers.map((header, headerIndex) => (
+                    <th key={`${header}-${headerIndex}`}>{renderInline(header)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {block.rows.map((row, rowIndex) => (
+                  <tr key={`row-${rowIndex}`}>
+                    {row.map((cell, cellIndex) => (
+                      <td key={`${cell}-${cellIndex}`}>{renderInline(cell)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <ul key={`list-${index}`}>
             {block.items.map((item, itemIndex) => (

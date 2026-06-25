@@ -30,7 +30,7 @@ def build_comparison(products: tuple[NormalizedProductFacts, ...]) -> Comparison
         return ComparisonResult("", "Mình cần ít nhất 2 mẫu đã xác định để so sánh.")
     a, b = selected
     lines = [
-        f"| Tiêu chí | {a.name} | {b.name} |",
+        f"| Tiêu chí | {_product_label(a)} | {_product_label(b)} |",
         "|---|---|---|",
     ]
     for field, label in COMPARISON_FIELDS:
@@ -46,8 +46,11 @@ def build_comparison(products: tuple[NormalizedProductFacts, ...]) -> Comparison
             conclusion_parts.append(f"Nếu cần GPU rời, {gpu_pick.name} đáng ưu tiên hơn.")
     if not conclusion_parts:
         conclusion_parts.append("Nếu chỉ văn phòng/học tập, hãy chọn theo giá và kích thước màn hình bạn thích hơn.")
-    conclusion_parts.append("Mình không kết luận độ bền/pin nếu catalog chưa có dữ liệu tương ứng.")
     return ComparisonResult("\n".join(lines), " ".join(conclusion_parts))
+
+
+def _product_label(product: NormalizedProductFacts) -> str:
+    return f"{product.name} ({product.code})"
 
 
 def _value(product: NormalizedProductFacts, field: str) -> str:

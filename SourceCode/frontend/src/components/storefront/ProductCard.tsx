@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Check, GitCompareArrows, Heart, Monitor, ShieldCheck, Smartphone, Sparkles } from 'lucide-react'
 import { useCommerceStore } from '@/stores/commerceStore'
 import type { Product } from '@/types/commerce'
@@ -72,6 +73,7 @@ function NoImage({ category }: { category: Product['category'] }) {
 }
 
 export function ProductCard({ product }: { product: Product }) {
+  const [imageFailed, setImageFailed] = useState(false)
   const favoriteCodes = useCommerceStore((s) => s.favoriteCodes)
   const compareProducts = useCommerceStore((s) => s.compareProducts)
   const toggleFavorite = useCommerceStore((s) => s.toggleFavorite)
@@ -85,9 +87,16 @@ export function ProductCard({ product }: { product: Product }) {
 
   return (
     <article className="product-card" aria-label={product.name}>
-      <button
+      <div
         className="product-card-img-zone"
+        role="button"
         onClick={() => openProduct(product)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            openProduct(product)
+          }
+        }}
         aria-label={`Xem nhanh ${product.name}`}
         tabIndex={0}
       >
@@ -102,8 +111,14 @@ export function ProductCard({ product }: { product: Product }) {
           </span>
         </div>
 
-        {product.image_url ? (
-          <img className="product-card-img" src={product.image_url} alt={product.name} loading="lazy" />
+        {product.image_url && !imageFailed ? (
+          <img
+            className="product-card-img"
+            src={product.image_url}
+            alt={product.name}
+            loading="lazy"
+            onError={() => setImageFailed(true)}
+          />
         ) : (
           <NoImage category={product.category} />
         )}
@@ -131,7 +146,7 @@ export function ProductCard({ product }: { product: Product }) {
           <Sparkles size={12} />
           {retailTag}
         </div>
-      </button>
+      </div>
 
       <div className="product-card-body">
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -170,8 +185,8 @@ export function ProductCard({ product }: { product: Product }) {
 
         {highlights.length > 0 && (
           <div className="product-spec-stack">
-            {highlights.slice(0, 3).map((item) => (
-              <div key={`${product.code}-${item.label}`} className="product-spec-row">
+            {highlights.slice(0, 3).map((item, index) => (
+              <div key={`${product.code}-${item.label}-${item.value}-${index}`} className="product-spec-row">
                 <span className="product-spec-label">{item.label}</span>
                 <span className="product-spec-value">{item.value}</span>
               </div>

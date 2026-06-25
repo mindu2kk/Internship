@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from backend.agent.spec_parser import (
@@ -70,7 +71,11 @@ def normalize_product(product: CatalogProduct) -> NormalizedProductFacts:
     screen_inches = parse_float_with_unit(raw("screen") or "", "inch")
     refresh_hz = parse_int_with_unit(raw("refresh_rate") or "", "hz")
     battery_wh = parse_float_with_unit(raw("battery") or "", "wh")
-    weight_kg = parse_float_with_unit(raw("weight") or "", "kg")
+    weight_source = raw("weight")
+    weight_kg = parse_float_with_unit(weight_source or "", "kg")
+    if weight_kg is None:
+        weight_source = _extract_weight_source(product.context)
+        weight_kg = parse_float_with_unit(weight_source or "", "kg")
     os_value = raw("os")
     price = _price_value(product.price) if product.price else None
 
@@ -85,6 +90,12 @@ def normalize_product(product: CatalogProduct) -> NormalizedProductFacts:
     add("refresh_hz", refresh_hz, "refresh_rate")
     add("battery_wh", battery_wh, "battery")
     add("weight_kg", weight_kg, "weight")
+    if weight_kg is not None and "weight_kg" not in evidence:
+        evidence["weight_kg"] = FactEvidence(
+            field="weight_kg",
+            value=weight_kg,
+            source_text=weight_source or product.context,
+        )
     add("os", os_value, "os")
 
     return NormalizedProductFacts(
@@ -106,6 +117,18 @@ def normalize_product(product: CatalogProduct) -> NormalizedProductFacts:
         os=os_value,
         evidence_map=evidence,
     )
+
+
+def _extract_weight_source(context: str) -> str | None:
+    if not context:
+        return None
+    compact = " ".join(context.split())
+    match = re.search(
+        r"[^.。!?]{0,80}\b\d+(?:[.,]\d+)?\s*kg\b[^.。!?]{0,80}",
+        compact,
+        flags=re.IGNORECASE,
+    )
+    return match.group(0) if match else None
 
 
 def normalize_products(products: list[CatalogProduct]) -> list[NormalizedProductFacts]:

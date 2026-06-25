@@ -108,3 +108,13 @@ def test_real_catalog_dell_mx_gpu_is_dedicated() -> None:
     assert facts.cpu_tier == "Core 7"
 
 
+def test_real_catalog_ideapad_weight_can_come_from_context_highlights() -> None:
+    catalog = get_catalog()
+    product = catalog.get("00929021")
+    assert product is not None
+
+    facts = normalize_product(product)
+    assert facts.weight_kg == 1.43
+    assert "1.43 kg" in facts.evidence_map["weight_kg"].source_text
+
+

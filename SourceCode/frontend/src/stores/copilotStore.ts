@@ -25,6 +25,9 @@ interface CopilotStore {
 const CHAT_TTL_MS = 5 * 60 * 1000
 let chatExpiryTimer: ReturnType<typeof setTimeout> | undefined
 
+export const CHAT_CONNECTIVITY_FALLBACK_TEXT =
+  'Mình chưa kết nối được máy chủ tư vấn lúc này. Bạn vẫn có thể tiếp tục nhập nhu cầu, hoặc bật backend rồi gửi lại để AURA lọc catalog và so sánh bằng dữ liệu thật.'
+
 const welcomeMessage: ChatMessage = {
   id: 'welcome',
   role: 'assistant',
@@ -127,7 +130,11 @@ export const useCopilotStore = create<CopilotStore>()(
         } catch (error) {
           get().refreshChatTtl()
           const text =
-            error instanceof Error ? error.message : 'Đã có lỗi xảy ra.'
+            error instanceof Error
+              && error.message
+              && !/failed to fetch|networkerror|load failed|không thể kết nối/i.test(error.message)
+              ? error.message
+              : CHAT_CONNECTIVITY_FALLBACK_TEXT
           set((state) => ({
             isLoading: false,
             messages: [

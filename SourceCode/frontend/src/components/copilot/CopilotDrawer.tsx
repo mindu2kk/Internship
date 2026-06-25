@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowUp,
+  Bot,
+  ChevronRight,
   GripVertical,
   Maximize2,
   MessagesSquare,
@@ -10,7 +12,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react'
-import { useCopilotStore } from '@/stores/copilotStore'
+import { CHAT_CONNECTIVITY_FALLBACK_TEXT, useCopilotStore } from '@/stores/copilotStore'
 import { useCommerceStore } from '@/stores/commerceStore'
 import { AmbientVoiceVisualizer } from './AmbientVoiceVisualizer'
 import { ChatMessageText } from './ChatMessageText'
@@ -18,13 +20,26 @@ import { EcosystemBundleCard } from './EcosystemBundleCard'
 import { InlineProductCard } from './InlineProductCard'
 
 const QUICK_PROMPTS = [
-  'Laptop học tập dưới 20 triệu',
-  'So sánh laptop gaming tầm trung',
-  'Điện thoại chụp ảnh đẹp',
+  {
+    label: 'Laptop học tập',
+    detail: 'Dưới 20 triệu, bền pin',
+    message: 'Laptop học tập dưới 20 triệu',
+  },
+  {
+    label: 'So sánh 2 mẫu',
+    detail: 'Chọn máy đáng mua hơn',
+    message: 'So sánh laptop gaming tầm trung',
+  },
+  {
+    label: 'Điện thoại camera',
+    detail: 'Ảnh đẹp, dễ dùng',
+    message: 'Điện thoại chụp ảnh đẹp',
+  },
 ]
 
 const MIN_DRAWER_WIDTH = 400
 const MAX_DRAWER_WIDTH = 860
+const TECHNICAL_ERROR_PATTERN = /failed to fetch|networkerror|load failed/i
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
@@ -52,8 +67,13 @@ export function CopilotDrawer() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const selectedProduct = useCommerceStore((s) => s.selectedProduct)
 
-  const currentCategory = conversationState?.category
-  const currentBudget = conversationState?.budget_target
+  const contextTitle = selectedProduct ? selectedProduct.name : 'Tư vấn tự do theo nhu cầu của bạn'
+  const contextMeta = selectedProduct
+    ? `${selectedProduct.brand} · ${selectedProduct.code} · ${selectedProduct.price}`
+    : conversationState?.category
+      ? `Đang hiểu danh mục: ${conversationState.category}`
+      : 'Hỏi ngắn, lọc nhanh, so sánh rõ ràng.'
+  const contextMode = selectedProduct ? 'Context sản phẩm' : conversationState?.category ? 'Đã nhận diện danh mục' : 'Đang đọc nhu cầu'
 
   const maxWidth = typeof window === 'undefined'
     ? MAX_DRAWER_WIDTH
@@ -154,11 +174,11 @@ export function CopilotDrawer() {
               <header className="drawer-header">
                 <div className="drawer-header-copy">
                   <div className="drawer-header-icon">
-                    <Sparkles size={16} style={{ color: '#D70018' }} />
+                    <Bot size={17} />
                   </div>
                   <div>
-                    <p className="drawer-header-kicker">AURA Advisor</p>
-                    <h2 className="drawer-header-title">Tư vấn theo catalog đang xem</h2>
+                    <p className="drawer-header-kicker">AURA Chat</p>
+                    <h2 className="drawer-header-title">Trợ lý mua sắm</h2>
                   </div>
                 </div>
 
@@ -178,82 +198,35 @@ export function CopilotDrawer() {
                 </div>
               </header>
 
-              <section className="drawer-context-panel">
-                <div className="drawer-context-card drawer-context-card-primary">
-                  <div className="drawer-context-card-head">
-                    <span className="drawer-context-label">Đang bám context</span>
-                    <span className="drawer-context-chip">{selectedProduct ? 'Focused' : 'Broad'}</span>
-                  </div>
-                  {selectedProduct ? (
-                    <>
-                      <strong className="drawer-context-value">{selectedProduct.name}</strong>
-                      <span className="drawer-context-meta">
-                        {selectedProduct.brand} · {selectedProduct.code} · {selectedProduct.price}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <strong className="drawer-context-value">Chưa khóa sản phẩm cụ thể</strong>
-                      <span className="drawer-context-meta">
-                        AURA sẽ giữ bối cảnh từ sản phẩm hoặc cuộc trò chuyện gần nhất.
-                      </span>
-                    </>
-                  )}
-                </div>
-
-                <div className="drawer-context-strip">
-                  <div className="drawer-context-card">
-                    <span className="drawer-context-label">Danh mục</span>
-                    <strong className="drawer-context-mini">{currentCategory || 'Đang mở rộng'}</strong>
-                  </div>
-                  <div className="drawer-context-card">
-                    <span className="drawer-context-label">Ngân sách</span>
-                    <strong className="drawer-context-mini">
-                      {currentBudget ? `${currentBudget.toLocaleString('vi-VN')}₫` : 'Chưa đặt'}
-                    </strong>
+              <section className="drawer-intelligence-strip" aria-label="Trạng thái trợ lý">
+                <div className="drawer-intelligence-main">
+                  <span className="drawer-live-dot" aria-hidden="true" />
+                  <div>
+                    <span>{contextMode}</span>
+                    <strong>{contextTitle}</strong>
+                    <small>{contextMeta}</small>
                   </div>
                 </div>
-              </section>
-
-              <section className="drawer-quick-actions">
-                {selectedProduct ? (
-                  <>
-                    <button
-                      className="suggest-chip suggest-chip-strong"
-                      onClick={() => void sendMessage(`Phân tích kỹ mẫu ${selectedProduct.code}`)}
-                    >
-                      Phân tích kỹ
-                    </button>
-                    <button
-                      className="suggest-chip"
-                      onClick={() => void sendMessage(`Máy ${selectedProduct.name} có hợp văn phòng không?`)}
-                    >
-                      Hợp văn phòng?
-                    </button>
-                    <button
-                      className="suggest-chip"
-                      onClick={() => void sendMessage(`So sánh mẫu ${selectedProduct.code} với các máy cùng tầm giá`)}
-                    >
-                      So sánh cùng tầm giá
-                    </button>
-                  </>
-                ) : (
-                  QUICK_PROMPTS.map((prompt) => (
-                    <button key={prompt} className="suggest-chip" onClick={() => void sendMessage(prompt)}>
-                      {prompt}
-                    </button>
-                  ))
-                )}
+                <div className="drawer-intelligence-meta" aria-hidden="true">
+                  <span>Catalog</span>
+                  <span>Live</span>
+                </div>
               </section>
 
               <section className="drawer-body">
                 <div className="drawer-section-title">
                   <MessagesSquare size={14} />
-                  <span>Trao đổi gần nhất</span>
+                  <span>Cuộc trò chuyện</span>
+                  <small>{messages.length} tin</small>
                 </div>
 
                 <div ref={scrollRef} className="drawer-message-stream scrollbar-thin">
-                  {messages.map((message) => (
+                  {messages.map((message) => {
+                    const displayText = message.role === 'assistant' && TECHNICAL_ERROR_PATTERN.test(message.text)
+                      ? CHAT_CONNECTIVITY_FALLBACK_TEXT
+                      : message.text
+
+                    return (
                     <div key={message.id} className={`drawer-message-row ${message.role === 'user' ? 'is-user' : ''}`}>
                       {message.role === 'assistant' && (
                         <div className="drawer-avatar">
@@ -264,7 +237,7 @@ export function CopilotDrawer() {
                       <div className={message.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-assistant'}>
                         {message.role === 'assistant' ? (
                           <>
-                            <ChatMessageText text={message.text} />
+                            <ChatMessageText text={displayText} />
                             {message.products && message.products.length > 0 && (
                               <div className="drawer-recommend-block">
                                 <div className="drawer-recommend-heading">Sản phẩm liên quan trong câu trả lời</div>
@@ -282,11 +255,12 @@ export function CopilotDrawer() {
                             )}
                           </>
                         ) : (
-                          <p className="whitespace-pre-wrap">{message.text}</p>
+                          <p className="whitespace-pre-wrap">{displayText}</p>
                         )}
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
 
                   {isLoading && (
                     <div className="drawer-message-row">
@@ -312,51 +286,87 @@ export function CopilotDrawer() {
                 </div>
               </section>
 
+              <section className="drawer-prompt-deck" aria-label="Gợi ý nhanh">
+                {selectedProduct ? (
+                  <>
+                    <button
+                      className="drawer-prompt-card drawer-prompt-card-strong"
+                      onClick={() => void sendMessage(`Phân tích kỹ mẫu ${selectedProduct.code}`)}
+                    >
+                      <span>Phân tích kỹ</span>
+                      <strong>Điểm mạnh, điểm yếu</strong>
+                      <ChevronRight size={14} />
+                    </button>
+                    <button
+                      className="drawer-prompt-card"
+                      onClick={() => void sendMessage(`Máy ${selectedProduct.name} có hợp văn phòng không?`)}
+                    >
+                      <span>Fit nhu cầu</span>
+                      <strong>Hợp văn phòng?</strong>
+                      <ChevronRight size={14} />
+                    </button>
+                    <button
+                      className="drawer-prompt-card"
+                      onClick={() => void sendMessage(`So sánh mẫu ${selectedProduct.code} với các máy cùng tầm giá`)}
+                    >
+                      <span>Đặt cạnh đối thủ</span>
+                      <strong>Cùng tầm giá</strong>
+                      <ChevronRight size={14} />
+                    </button>
+                  </>
+                ) : (
+                  QUICK_PROMPTS.map((prompt, index) => (
+                    <button
+                      key={prompt.message}
+                      className={`drawer-prompt-card ${index === 0 ? 'drawer-prompt-card-strong' : ''}`}
+                      onClick={() => void sendMessage(prompt.message)}
+                    >
+                      <span>{prompt.detail}</span>
+                      <strong>{prompt.label}</strong>
+                      <ChevronRight size={14} />
+                    </button>
+                  ))
+                )}
+              </section>
+
               <div className="drawer-input-shell">
                 {isListening ? (
                   <AmbientVoiceVisualizer onResult={handleVoiceResult} onCancel={() => setIsListening(false)} />
                 ) : (
-                  <>
-                    <div className="advisor-input-container">
-                      <textarea
-                        ref={textareaRef}
-                        className="scrollbar-none flex-1 resize-none bg-transparent outline-none"
-                        style={{
-                          color: '#0F172A',
-                          fontSize: '14px',
-                          lineHeight: 1.6,
-                          minHeight: '30px',
-                          maxHeight: '180px',
-                          padding: '7px 4px 7px 2px',
-                        }}
-                        placeholder="Hỏi tiếp về mẫu đang xem, nhu cầu hoặc so sánh..."
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault()
-                            submit()
-                          }
-                        }}
-                        rows={1}
-                        aria-label="Tin nhắn"
-                      />
+                  <div className="advisor-input-container">
+                    <textarea
+                      ref={textareaRef}
+                      className="scrollbar-none flex-1 resize-none bg-transparent outline-none"
+                      style={{
+                        color: '#0F172A',
+                        fontSize: '14px',
+                        lineHeight: 1.6,
+                        minHeight: '30px',
+                        maxHeight: '180px',
+                        padding: '7px 4px 7px 2px',
+                      }}
+                      placeholder="Hỏi tiếp về mẫu đang xem, nhu cầu hoặc so sánh..."
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          submit()
+                        }
+                      }}
+                      rows={1}
+                      aria-label="Tin nhắn"
+                    />
 
-                      <div className="drawer-input-actions">
-                        <button className="btn-icon h-10 w-10" onClick={() => setIsListening(true)} aria-label="Giọng nói">
-                          <Mic size={16} />
-                        </button>
-                        <button className="drawer-send-button" onClick={submit} disabled={!input.trim() || isLoading} aria-label="Gửi">
-                          <ArrowUp size={16} />
-                        </button>
-                      </div>
+                    <div className="drawer-input-actions">
+                      <button className="btn-icon h-10 w-10" onClick={() => setIsListening(true)} aria-label="Giọng nói">
+                        <Mic size={16} />
+                      </button>
+                      <button className="drawer-send-button" onClick={submit} disabled={!input.trim() || isLoading} aria-label="Gửi">
+                        <ArrowUp size={16} />
+                      </button>
                     </div>
-
-                    <div className="drawer-input-hint">
-                      <span>Kéo mép trái để mở rộng</span>
-                      <span>Enter để gửi · Shift + Enter xuống dòng</span>
-                    </div>
-                  </>
+                  </div>
                 )}
               </div>
             </motion.aside>

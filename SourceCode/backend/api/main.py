@@ -960,7 +960,19 @@ def _try_contract_first_response(
     tool_call: dict[str, object] = {}
     tool_result_summary: dict[str, object] = {}
 
-    if route.intent in {"new_filtered_search", "query_continuation"}:
+    direct_subject_products = catalog.resolve_products(request.message, limit=2)
+    if (
+        route.intent in {"new_filtered_search", "query_continuation"}
+        and len(direct_subject_products) >= 1
+        and _is_product_suitability_question(normalized_message)
+    ):
+        products = [direct_subject_products[0]]
+        focused_code_for_verifier = products[0].code
+        response_mode = "fit_assessment"
+        tools_used = ["route_intent", "resolve_product_reference", "compose_product_fit_analysis"]
+        tool_call = {"tool": "get_product_by_name", "code": products[0].code}
+        tool_result_summary = {"returned": 1}
+    elif route.intent in {"new_filtered_search", "query_continuation"}:
         exclude_codes = (
             {candidate.code for candidate in agent_state.last_shown_candidates}
             if route.intent == "query_continuation" or route.constraints.get("exclude_previous") is True
@@ -1005,19 +1017,28 @@ def _try_contract_first_response(
         tool_call = {"tool": "get_product_field", "code": product.code, "field": field_name}
         tool_result_summary = {"missing": field_result.missing, "field": field_name}
     elif route.intent == "comparison":
-        products = _comparison_products_from_state(catalog, agent_state)
+        explicit_products = _products_from_message_codes(catalog, request.message)
+        products = (
+            explicit_products
+            if len(explicit_products) >= 2
+            else _comparison_products_from_explicit_or_state(catalog, request.message, agent_state)
+        )
         if len(products) < 2:
             return None
         response_mode = "comparison"
         tools_used = ["route_intent", "resolve_comparison_candidates", "compare_products"]
-        tool_call = {"tool": "compare_products", "source": "last_shown_candidates"}
+        tool_call = {
+            "tool": "compare_products",
+            "source": "explicit_codes" if len(explicit_products) >= 2 else "last_shown_candidates",
+        }
         tool_result_summary = {"returned": len(products)}
     else:
         resolution = resolve_agent_product_reference(request.message, agent_state)
         product_resolution = _resolution_to_dict(resolution)
-        if not resolution.resolved or not resolution.code:
-            return None
-        product = catalog.get(resolution.code)
+        product = catalog.get(resolution.code) if resolution.resolved and resolution.code else None
+        if product is None:
+            explicit_products = _products_from_message_codes(catalog, request.message)
+            product = explicit_products[0] if len(explicit_products) == 1 else None
         if product is None:
             return None
         products = [product]
@@ -1199,7 +1220,7 @@ def _serialize_contract_products(
 def _legacy_answer_type(response_mode: str) -> str:
     if response_mode in {"filtered_search_result", "query_continuation_result"}:
         return "catalog_search"
-    if response_mode == "focused_product_detail":
+    if response_mode in {"focused_product_detail", "fit_assessment"}:
         return "product_detail"
     if response_mode == "clarifying_question":
         return "clarify"
@@ -1232,6 +1253,66 @@ def _comparison_products_from_state(catalog, agent_state: ContractAgentState) ->
         if product is not None and all(existing.code != product.code for existing in products):
             products.insert(0, product)
     return products[:2]
+
+
+def _comparison_products_from_explicit_or_state(
+    catalog,
+    message: str,
+    agent_state: ContractAgentState,
+) -> list[CatalogProduct]:
+    explicit_products = catalog.resolve_products(message, limit=2)
+    if len(explicit_products) == 1:
+        anchor = explicit_products[0]
+        competitor = _closest_same_range_product(catalog, anchor)
+        if competitor is not None:
+            return [anchor, competitor]
+        state_products = _comparison_products_from_state(catalog, agent_state)
+        return [anchor] + [product for product in state_products if product.code != anchor.code][:1]
+    if len(explicit_products) >= 2:
+        return explicit_products[:2]
+    return _comparison_products_from_state(catalog, agent_state)
+
+
+def _closest_same_range_product(catalog, anchor: CatalogProduct) -> CatalogProduct | None:
+    from backend.services.catalog import _price_value
+
+    anchor_price = _price_value(anchor.price)
+    if not anchor_price:
+        return None
+    window = max(3_000_000, int(anchor_price * 0.18))
+    candidates = [
+        product
+        for product in catalog.products
+        if product.code != anchor.code
+        and product.category == anchor.category
+        and abs(_price_value(product.price) - anchor_price) <= window
+    ]
+    candidates.sort(key=lambda product: (abs(_price_value(product.price) - anchor_price), _price_value(product.price)))
+    return candidates[0] if candidates else None
+
+
+def _products_from_message_codes(catalog, message: str) -> list[CatalogProduct]:
+    products: list[CatalogProduct] = []
+    for code in re.findall(r"\b[A-Z0-9]{8}\b", message.upper()):
+        product = catalog.get(code)
+        if product is not None and all(existing.code != product.code for existing in products):
+            products.append(product)
+    return products
+
+
+def _is_product_suitability_question(normalized_message: str) -> bool:
+    return any(
+        phrase in normalized_message
+        for phrase in (
+            "co hop",
+            "phu hop",
+            "hop van phong",
+            "hop hoc tap",
+            "dung van phong",
+            "lam van phong",
+            "on khong",
+        )
+    )
 
 
 def _extract_follow_up_question(answer_text: str) -> str | None:

@@ -152,15 +152,6 @@ def route_intent(user_query: str, state: AgentState | None = None) -> IntentRout
             constraints=constraints,
         )
 
-    if re.search(r"\b0\d{7}\b", user_query):
-        return IntentRoute(
-            intent="product_detail",
-            confidence=0.94,
-            reason="Exact product code should resolve to product detail.",
-            field_requested=field_requested,
-            constraints=constraints,
-        )
-
     if _is_top_two_followup(normalized, state):
         return IntentRoute(
             intent="comparison",
@@ -174,6 +165,15 @@ def route_intent(user_query: str, state: AgentState | None = None) -> IntentRout
             intent="comparison",
             confidence=0.94,
             reason="Comparison wording or multiple brands detected.",
+            constraints=constraints,
+        )
+
+    if re.search(r"\b0\d{7}\b", user_query):
+        return IntentRoute(
+            intent="product_detail",
+            confidence=0.94,
+            reason="Exact product code should resolve to product detail.",
+            field_requested=field_requested,
             constraints=constraints,
         )
 

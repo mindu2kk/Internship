@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from backend.agent.evidence import EvidenceLedger
 from backend.agent.product_facts import NormalizedProductFacts
+from backend.agent.search_filters import screen_inches_match
 from backend.agent.spec_parser import normalize_text
 from backend.agent.state import ProductConstraints
 
@@ -181,7 +182,6 @@ def _verify_constraints(
         ("gpu_type", constraints.gpu_type, product.gpu_type),
         ("ram_gb", constraints.ram_gb, product.ram_gb),
         ("storage_gb", constraints.storage_gb, product.storage_gb),
-        ("screen_inches", constraints.screen_inches, product.screen_inches),
     )
     for field_name, expected, actual in checks:
         if expected is not None and actual != expected:
@@ -192,6 +192,14 @@ def _verify_constraints(
                     message=f"{product.code} does not satisfy {field_name}={expected}.",
                 )
             )
+    if not screen_inches_match(product.screen_inches, constraints.screen_inches):
+        failures.append(
+            VerificationFailure(
+                code="constraint_mismatch_screen_inches",
+                severity="blocker",
+                message=f"{product.code} does not satisfy screen_inches={constraints.screen_inches}.",
+            )
+        )
     if constraints.min_price is not None:
         if product.price_value is None or product.price_value < constraints.min_price:
             failures.append(

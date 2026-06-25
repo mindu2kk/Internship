@@ -132,3 +132,85 @@ def test_notable_two_followup_uses_latest_dell_candidates_after_prior_search() -
     assert "Asus TUF" not in r3["text"]
     assert "Lenovo Gaming" not in r3["text"]
 
+
+def test_explicit_compare_with_product_codes_returns_both_products() -> None:
+    client = TestClient(app)
+
+    query = (
+        "So sánh các sản phẩm: Dell 15 DC15255 R7-7730U_884116430117 "
+        "(00927423), Dell 15 DC15250 i5-1334U (71092479) (00927402)"
+    )
+    response = _post_chat(client, query, [], None)
+    codes = [product["code"] for product in response["products"]]
+
+    assert response["response_mode"] == "comparison"
+    assert response["answer_type"] == "comparison"
+    assert codes == ["00927423", "00927402"]
+    assert response["conversation_state"]["compared_codes"] == codes
+    assert "00927423" in response["text"]
+    assert "00927402" in response["text"]
+
+
+def test_dell_15_inch_query_matches_15_point_6_laptops() -> None:
+    client = TestClient(app)
+
+    response = _post_chat(client, "Có laptop dell nào màn hành 15 inch không", [], None)
+    codes = [product["code"] for product in response["products"]]
+
+    assert response["response_mode"] == "filtered_search_result"
+    assert response["answer_type"] == "catalog_search"
+    assert codes
+    assert all(product["brand"] == "Dell" for product in response["products"])
+    assert all(product["category"] == "Laptop" for product in response["products"])
+    assert any("15.6 inch" in " ".join(product["specs"]) for product in response["products"])
+
+
+def test_exact_sku_product_detail_uses_contract_analysis_not_legacy_fallback() -> None:
+    client = TestClient(app)
+
+    response = _post_chat(client, "Phan tich ky mau 00929021", [], None)
+
+    assert response["response_mode"] == "focused_product_detail"
+    assert response["answer_type"] == "product_detail"
+    assert [product["code"] for product in response["products"]] == ["00929021"]
+    assert "Phân tích theo tiêu chí" in response["text"]
+    assert "- Hiệu năng:" in response["text"]
+    assert "- Màn hình:" in response["text"]
+    assert "- Di động và pin:" in response["text"]
+    assert "1.43kg" in response["text"]
+    assert "chưa có trọng lượng" not in response["text"]
+
+
+def test_named_product_office_fit_answers_the_named_product_not_new_search() -> None:
+    client = TestClient(app)
+
+    response = _post_chat(
+        client,
+        "Máy Lenovo IdeaPad Slim 3 14IPH11 U7 355 (83UQ003PVN) có hợp văn phòng không?",
+        [],
+        None,
+    )
+
+    assert response["response_mode"] == "fit_assessment"
+    assert response["answer_type"] == "product_detail"
+    assert [product["code"] for product in response["products"]] == ["00929021"]
+    assert "Mình tìm thấy 4 mẫu" not in response["text"]
+    assert "Vì sao hợp văn phòng" in response["text"]
+    assert "Kết luận:" in response["text"]
+    assert "văn phòng" in response["text"]
+    assert "Bạn muốn mình phân tích mẫu này theo nhu cầu" not in response["text"]
+
+
+def test_same_range_comparison_keeps_explicit_product_and_avoids_unasked_durability_warning() -> None:
+    client = TestClient(app)
+
+    response = _post_chat(client, "So sánh mẫu 00929021 với các máy cùng tầm giá", [], None)
+    codes = [product["code"] for product in response["products"]]
+
+    assert response["response_mode"] == "comparison"
+    assert response["answer_type"] == "comparison"
+    assert codes[0] == "00929021"
+    assert len(codes) == 2
+    assert "| Tiêu chí |" in response["text"]
+    assert "Mình không kết luận độ bền/pin" not in response["text"]
+

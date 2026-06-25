@@ -89,6 +89,8 @@ def compose_response(draft: ResponseDraftInput) -> AdvisorResponse:
         return _compose_missing_field(draft)
     if mode == "focused_product_field_answer":
         return _compose_focused_field_answer(draft)
+    if mode == "fit_assessment":
+        return _compose_fit_assessment(draft)
     if mode == "focused_product_detail":
         return _compose_focused_detail(draft)
     if mode in {"filtered_search_result", "query_continuation_result"}:
@@ -120,11 +122,10 @@ def _compose_focused_detail(draft: ResponseDraftInput) -> AdvisorResponse:
     lines.extend(
         [
             "",
-            "Đánh giá nhanh:",
-            f"- Phù hợp nếu: bạn cần {_fit_summary(product)}.",
-            f"- Cần cân nhắc nếu: {_caution_summary(product)}.",
+            "Phân tích theo tiêu chí:",
         ]
     )
+    lines.extend(_focused_analysis_lines(product))
     follow_up = next_best_question(
         response_mode="focused_product_detail",
         constraints=draft.constraints,
@@ -136,6 +137,22 @@ def _compose_focused_detail(draft: ResponseDraftInput) -> AdvisorResponse:
     return _response(
         "\n".join(lines),
         "focused_product_detail",
+        (product,),
+        draft,
+        extra_actions=(UIAction("SET_FOCUSED_PRODUCT", (product.code,)),),
+    )
+
+
+def _compose_fit_assessment(draft: ResponseDraftInput) -> AdvisorResponse:
+    product = draft.products[0]
+    use_case = (draft.constraints.use_case if draft.constraints else None) or "office"
+    if use_case == "office":
+        lines = _office_fit_assessment_lines(product)
+    else:
+        lines = _generic_fit_assessment_lines(product, use_case)
+    return _response(
+        "\n".join(lines),
+        "fit_assessment",
         (product,),
         draft,
         extra_actions=(UIAction("SET_FOCUSED_PRODUCT", (product.code,)),),
@@ -438,6 +455,178 @@ def _caution_summary(product: NormalizedProductFacts) -> str:
     if missing:
         return "catalog còn thiếu, chưa có " + ", ".join(_field_label(field) for field in missing)
     return "bạn cần thông tin ngoài catalog như độ bền thực tế hoặc bảo hành chi tiết"
+
+
+def _focused_analysis_lines(product: NormalizedProductFacts) -> list[str]:
+    lines: list[str] = []
+
+    performance_bits: list[str] = []
+    if product.cpu_raw or product.cpu_tier:
+        performance_bits.append(f"CPU {product.cpu_raw or product.cpu_tier}")
+    if product.ram_gb is not None:
+        performance_bits.append(f"RAM {product.ram_gb}GB")
+    if product.gpu_raw:
+        performance_bits.append(f"GPU {product.gpu_raw}")
+    elif product.gpu_type == "integrated":
+        performance_bits.append("GPU tích hợp")
+    elif product.gpu_type is None:
+        performance_bits.append("catalog chưa có thông tin GPU")
+    lines.append(
+        "- Hiệu năng: "
+        + (
+            ", ".join(performance_bits)
+            + "; phù hợp học tập, văn phòng, họp online và đa nhiệm thường ngày."
+            if performance_bits
+            else "catalog chưa có đủ CPU/RAM/GPU để kết luận sâu."
+        )
+    )
+
+    display_bits: list[str] = []
+    screen = _format_screen(product)
+    if screen:
+        display_bits.append(screen)
+    resolution = _evidence_value(product, "resolution")
+    if resolution:
+        display_bits.append(str(resolution))
+    lines.append(
+        "- Màn hình: "
+        + (
+            ", ".join(display_bits)
+            + "; hợp đọc tài liệu, làm việc trình duyệt và chia cửa sổ ở mức vừa."
+            if display_bits
+            else "catalog chưa có đủ kích thước/độ phân giải để đánh giá."
+        )
+    )
+
+    mobility_bits: list[str] = []
+    if product.weight_kg is not None:
+        mobility_bits.append(f"{product.weight_kg:g}kg")
+    if product.battery_wh is not None:
+        mobility_bits.append(f"pin {product.battery_wh:g}Wh")
+    lines.append(
+        "- Di động và pin: "
+        + (
+            ", ".join(mobility_bits)
+            + "; đây là nhóm thông số quan trọng nếu mang máy đi học/đi làm hằng ngày."
+            if mobility_bits
+            else "catalog chưa đủ dữ liệu pin/trọng lượng để đánh giá độ cơ động."
+        )
+    )
+
+    storage_bits: list[str] = []
+    if product.storage_gb is not None:
+        storage_bits.append(f"SSD {product.storage_gb}GB")
+    if product.ram_gb is not None:
+        storage_bits.append(f"RAM {product.ram_gb}GB")
+    lines.append(
+        "- Bộ nhớ/lưu trữ: "
+        + (
+            ", ".join(storage_bits)
+            + "; ổn cho app học tập, Office, trình duyệt nhiều tab và dữ liệu cá nhân cơ bản."
+            if storage_bits
+            else "catalog chưa có đủ RAM/SSD để đánh giá khả năng dùng lâu dài."
+        )
+    )
+
+    lines.append(f"- Phù hợp nếu: bạn cần {_fit_summary(product)}.")
+    cautions = _detailed_cautions(product)
+    if cautions:
+        lines.append("- Cần cân nhắc: " + "; ".join(cautions) + ".")
+    return lines
+
+
+def _office_fit_assessment_lines(product: NormalizedProductFacts) -> list[str]:
+    verdict = _office_verdict(product)
+    lines = [
+        f"Có, {product.name} ({product.code}) {verdict}.",
+        "",
+        "Vì sao hợp văn phòng:",
+    ]
+    reasons: list[str] = []
+    if product.cpu_raw or product.cpu_tier:
+        reasons.append(f"- CPU {product.cpu_raw or product.cpu_tier} đủ mạnh cho Office, trình duyệt, họp online và xử lý nhiều tab.")
+    if product.ram_gb is not None:
+        reasons.append(f"- RAM {product.ram_gb}GB giúp đa nhiệm văn phòng thoải mái hơn mức cơ bản.")
+    if product.storage_gb is not None:
+        reasons.append(f"- SSD {product.storage_gb}GB đủ cho hệ điều hành, phần mềm làm việc và tài liệu cá nhân thông thường.")
+    screen = _format_screen(product)
+    if screen:
+        reasons.append(f"- Màn hình {screen} phù hợp làm việc cơ động; kích thước 14 inch dễ mang theo hơn nhóm 15-16 inch.")
+    if product.weight_kg is not None:
+        reasons.append(f"- Trọng lượng {product.weight_kg:g}kg hợp mang đi làm, đi học hoặc họp ngoài văn phòng.")
+    if product.battery_wh is not None:
+        reasons.append(f"- Pin {product.battery_wh:g}Wh là điểm cộng cho ngày làm việc có di chuyển.")
+    lines.extend(reasons or ["- Catalog hiện có quá ít thông số để kết luận sâu về nhu cầu văn phòng."])
+
+    cautions = _office_cautions(product)
+    if cautions:
+        lines.extend(["", "Điểm cần cân nhắc:"])
+        lines.extend(f"- {item}" for item in cautions)
+
+    lines.extend(["", _office_buying_conclusion(product)])
+    return lines
+
+
+def _generic_fit_assessment_lines(product: NormalizedProductFacts, use_case: str) -> list[str]:
+    return [
+        f"Mình đang xem đúng mẫu: {product.name} ({product.code}).",
+        "",
+        f"Với nhu cầu {use_case}, các thông số đáng chú ý là:",
+        *_focused_analysis_lines(product),
+        "",
+        "Kết luận: nên so thêm với 1-2 mẫu cùng tầm nếu nhu cầu của bạn có phần mềm chuyên biệt.",
+    ]
+
+
+def _office_verdict(product: NormalizedProductFacts) -> str:
+    if product.ram_gb is not None and product.ram_gb >= 16 and product.storage_gb is not None:
+        return "hợp văn phòng tốt"
+    return "có thể dùng văn phòng, nhưng cần xem kỹ cấu hình còn thiếu"
+
+
+def _office_cautions(product: NormalizedProductFacts) -> list[str]:
+    cautions: list[str] = []
+    if product.price_value is not None and product.price_value >= 30_000_000:
+        cautions.append("Giá trên 30 triệu là khá cao nếu chỉ dùng Word, Excel, trình duyệt và họp online.")
+    if product.screen_inches is not None and product.screen_inches <= 14:
+        cautions.append("Màn 14 inch gọn nhẹ, nhưng nếu làm Excel/bảng tính lớn cả ngày thì màn 15-16 inch sẽ thoải mái hơn.")
+    if product.gpu_type == "integrated" or product.gpu_type is None:
+        cautions.append("Không nên chọn mẫu này nếu công việc văn phòng của bạn kèm dựng 3D, render nặng hoặc game nặng.")
+    return cautions
+
+
+def _office_buying_conclusion(product: NormalizedProductFacts) -> str:
+    if product.price_value is not None and product.price_value >= 30_000_000:
+        return (
+            "Kết luận: nên mua nếu bạn ưu tiên máy gọn, pin tốt, RAM 16GB và muốn một mẫu văn phòng cao cấp. "
+            "Nếu chỉ làm văn phòng cơ bản, nên so thêm mẫu rẻ hơn cùng RAM/SSD trước khi chốt."
+        )
+    return "Kết luận: nên mua cho văn phòng nếu mức giá phù hợp ngân sách của bạn."
+
+
+def _detailed_cautions(product: NormalizedProductFacts) -> list[str]:
+    cautions: list[str] = []
+    if product.gpu_type == "integrated":
+        cautions.append("không nên xem là lựa chọn chính cho game nặng hoặc dựng 3D")
+    elif product.gpu_type is None:
+        cautions.append("catalog chưa có GPU nên chưa kết luận chắc về game/đồ họa")
+    if product.price_value is not None and product.price_value >= 30_000_000:
+        cautions.append("mức giá trên 30 triệu nên cần so thêm với mẫu cùng tầm trước khi chốt")
+    missing = [
+        _field_label(field)
+        for field in ("battery_wh", "weight_kg")
+        if getattr(product, field, None) is None
+    ]
+    if missing:
+        cautions.append("catalog còn thiếu " + ", ".join(missing))
+    if not cautions:
+        cautions.append("nên kiểm thêm bảo hành, cổng kết nối và trải nghiệm màn hình thực tế")
+    return cautions
+
+
+def _evidence_value(product: NormalizedProductFacts, field_name: str) -> object | None:
+    evidence = product.evidence_map.get(field_name)
+    return evidence.value if evidence is not None else None
 
 
 def _strength_summary(product: NormalizedProductFacts) -> str:

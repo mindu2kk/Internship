@@ -6,6 +6,16 @@ from backend.agent.product_facts import NormalizedProductFacts
 from backend.agent.state import ProductConstraints
 
 
+def screen_inches_match(actual: float | None, expected: float | None) -> bool:
+    if expected is None:
+        return True
+    if actual is None:
+        return False
+    if float(expected).is_integer():
+        return int(actual) == int(expected)
+    return abs(actual - expected) <= 0.11
+
+
 def matches_constraints(
     facts: NormalizedProductFacts,
     constraints: ProductConstraints,
@@ -33,7 +43,7 @@ def matches_constraints(
         if facts.storage_gb != constraints.storage_gb:
             return False, "storage_gb"
     if constraints.screen_inches is not None:
-        if facts.screen_inches != constraints.screen_inches:
+        if not screen_inches_match(facts.screen_inches, constraints.screen_inches):
             return False, "screen_inches"
     return True, None
 

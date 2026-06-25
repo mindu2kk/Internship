@@ -13,6 +13,7 @@ from typing import Literal
 from backend.agent.intent_router import IntentRoute
 from backend.agent.product_facts import NormalizedProductFacts
 from backend.agent.response_composer import AdvisorResponse
+from backend.agent.search_filters import screen_inches_match
 from backend.agent.state import ProductConstraints, QueryFrame
 
 
@@ -114,17 +115,18 @@ def check_domain_contract(
                 )
             )
 
-    for product in products:
-        if product.code not in response.related_product_codes:
-            continue
-        if not product_matches_constraints(product, query_frame.constraints):
-            violations.append(
-                _violation(
-                    "PRODUCT_DOES_NOT_MATCH_FILTER",
-                    "R5",
-                    f"{product.code} does not satisfy the active query frame.",
+    if route.intent != "comparison":
+        for product in products:
+            if product.code not in response.related_product_codes:
+                continue
+            if not product_matches_constraints(product, query_frame.constraints):
+                violations.append(
+                    _violation(
+                        "PRODUCT_DOES_NOT_MATCH_FILTER",
+                        "R5",
+                        f"{product.code} does not satisfy the active query frame.",
+                    )
                 )
-            )
 
     if _mentions_unknown_product(response.answer_text, response.related_product_codes, products):
         violations.append(
@@ -149,11 +151,12 @@ def product_matches_constraints(
         ("gpu_type", constraints.gpu_type, product.gpu_type),
         ("ram_gb", constraints.ram_gb, product.ram_gb),
         ("storage_gb", constraints.storage_gb, product.storage_gb),
-        ("screen_inches", constraints.screen_inches, product.screen_inches),
     )
     for _, expected, actual in checks:
         if expected is not None and actual != expected:
             return False
+    if not screen_inches_match(product.screen_inches, constraints.screen_inches):
+        return False
     if constraints.min_price is not None and (
         product.price_value is None or product.price_value < constraints.min_price
     ):

@@ -7,7 +7,7 @@ from backend.agent.product_facts import normalize_product
 from backend.agent.response_composer import ResponseDraftInput, compose_response
 from backend.agent.state import ProductConstraints
 from backend.agent.verifier import AdvisorResponseContract, verify_response
-from backend.services.catalog import CatalogProduct
+from backend.services.catalog import CatalogProduct, get_catalog
 
 
 def _product(
@@ -91,6 +91,32 @@ def test_focused_product_detail_uses_selected_product_facts_and_sets_focus() -> 
     assert "MSI" not in response.answer_text
     assert "41Wh" in response.answer_text
     assert any(action.type == "SET_FOCUSED_PRODUCT" for action in response.ui_actions)
+
+
+def test_focused_product_detail_analyzes_real_ideapad_across_multiple_criteria() -> None:
+    catalog = get_catalog()
+    product = catalog.get("00929021")
+    assert product is not None
+    facts = _facts(product)
+    ledger = build_evidence_ledger(list(facts))
+
+    response = compose_response(
+        ResponseDraftInput(
+            response_mode="focused_product_detail",
+            products=facts,
+            evidence_ledger=ledger,
+            focused_product_code=product.code,
+        )
+    )
+
+    assert response.answer_mode == "focused_product_detail"
+    assert "Phân tích theo tiêu chí" in response.answer_text
+    assert "- Hiệu năng:" in response.answer_text
+    assert "- Màn hình:" in response.answer_text
+    assert "- Di động và pin:" in response.answer_text
+    assert "- Bộ nhớ/lưu trữ:" in response.answer_text
+    assert "1.43kg" in response.answer_text
+    assert "chưa có trọng lượng" not in response.answer_text
 
 
 def test_missing_field_response_discloses_missing_field_without_broad_search() -> None:
