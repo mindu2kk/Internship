@@ -31,6 +31,8 @@ llama-index>=0.9.0
 llama-index-llms-openai
 llama-index-llms-anthropic
 llama-index-embeddings-huggingface
+llama-index-vector-stores-chroma
+llama-index-readers-file
 
 # Vector database for policy/product lookup
 chromadb>=0.4.0
