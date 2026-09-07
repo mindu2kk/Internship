@@ -876,7 +876,7 @@ def _try_contract_first_response(
     catalog,
     request_timer: RequestTimer,
 ) -> ChatResponse | None:
-    if _env_enabled("HARNESS_DEV_MODE"):
+    if _env_enabled("HARNESS_DEV_MODE") or _env_enabled("EXPOSE_DECISION_TRACE"):
         return None
     if "unittest.mock" in type(get_ai_service()).__module__:
         return None
