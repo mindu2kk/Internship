@@ -70,6 +70,10 @@ jobs:
     needs: [backend, frontend]
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      BACKEND_IMAGE: aura-backend:ci
+      FRONTEND_IMAGE: aura-frontend:ci
+      HTTP_PORT: '8080'
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -90,10 +94,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Start exact CI images
-        env:
-          BACKEND_IMAGE: aura-backend:ci
-          FRONTEND_IMAGE: aura-frontend:ci
-          HTTP_PORT: '8080'
         run: docker compose -f SourceCode/docker-compose.production.yml up -d --wait
       - name: Smoke test public and API paths
         run: |
