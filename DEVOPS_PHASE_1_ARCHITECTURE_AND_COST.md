@@ -1,6 +1,6 @@
 # AURA Phase 1 — AWS Architecture and Cost Gate
 
-**Status:** `t3a.micro` is the approved x86_64 candidate. A complete calculator estimate and 1 GiB staging memory/load evidence are required before any Terraform apply.
+**Status:** `t3a.small` is the selected x86_64 candidate. Its prior cost-gate result was rejected, so no Terraform apply is permitted unless the owner changes the USD 20 normal-month ceiling or a new complete estimate passes it. A 2 GiB staging memory/load result is also required.
 **Date:** 2026-09-29
 **Depends on:** `DEVOPS_PHASE_0_PRODUCTION_CONTRACT.md`
 
@@ -10,7 +10,7 @@ The owner approved the following Release 1 constraints on 2026-09-27:
 
 - Cloudflare is the DNS/proxy provider; `www` stays on Vercel and the actual production domain stays private until DNS work.
 - The sustainable AWS limit is USD 20 in a normal month and USD 25 under plausible high use. A calculator result above either threshold prohibits `terraform apply`.
-- x86_64 `t3a.micro` is the approved compute candidate. This architecture change resets the calculator gate; the previous ARM and `t3a.small` estimates cannot authorize an apply.
+- x86_64 `t3a.small` is the selected compute candidate. This architecture change invalidates the prior `t3a.micro` cost-gate pass and requires a new cost decision before any apply.
 - Chroma uses encrypted EBS and must have a daily S3 backup/rebuild path proven in staging for the 24-hour RPO.
 - The resource scope is frozen to VPC/networking, EC2, encrypted EBS, IAM, ECR, S3, SSM, CloudWatch, secrets, and AWS Budget. ALB, NAT Gateway, RDS, ASG, Kubernetes, and multi-AZ replicas are deferred.
 - The GitHub `production` environment requires an explicit human approval before promotion.
@@ -31,7 +31,7 @@ A direct public IPv4 address on EC2 is also too expensive for the normal-month l
 |---|---|---|---|
 | A — ALB + EC2 | Public ALB, EC2 private target, ACM TLS | Best network isolation and upgrade path to multiple instances | **Rejected for Release 1:** fixed ALB cost plus EC2 exceeds USD 25 before normal operational extras. |
 | B1 — Cloudflare + public-IPv4 EC2 | Cloudflare proxies `api` to HTTPS Nginx/FastAPI on EC2 | No public SSH or FastAPI; one compute single point of failure | **Rejected:** public IPv4 means the normal-month floor already consumes the USD 20 budget. |
-| B2 — Cloudflare Tunnel + IPv6-only EC2 | Cloudflare Tunnel makes an outbound connection from EC2 to Cloudflare; tunnel forwards locally to Nginx/FastAPI | No Internet ingress, no public IPv4, one compute single point of failure | **Selected candidate with `t3a.micro`:** cost and 1 GiB memory/load gates must both pass before staging. |
+| B2 — Cloudflare Tunnel + IPv6-only EC2 | Cloudflare Tunnel makes an outbound connection from EC2 to Cloudflare; tunnel forwards locally to Nginx/FastAPI | No Internet ingress, no public IPv4, one compute single point of failure | **Selected candidate with `t3a.small`:** the current USD 20 normal-month gate fails; a budget change or lower-cost design is required before staging. |
 | C — ALB/ASG | ALB with at least two application instances and rolling replacement | Higher availability and safer host replacement | **Deferred:** revisit after measured demand or a higher budget. |
 
 This is an explicit trade-off: Release 1 targets recoverability and controlled deployment, not multi-AZ high availability. It remains consistent with the accepted 99.5% availability objective.
@@ -57,7 +57,7 @@ Users ── HTTPS ──> api.<domain> ──> Cloudflare edge ──> Cloudfla
 | Area | Minimum component | Design rule |
 |---|---|---|
 | Region | `ap-southeast-1` candidate | Use for the first estimate because it is close to the primary audience and broadly supports the required services. It is not selected until the calculator result and IPv6 service-connectivity test are approved. |
-| Compute | One EC2, 1 GiB-memory candidate | Use x86_64 `t3a.micro`; do not select it from price alone. A complete calculator estimate and staging memory/load result are mandatory. |
+| Compute | One EC2, 2 GiB-memory candidate | Use x86_64 `t3a.small`; do not select it from price alone. A complete calculator estimate and staging memory/load result are mandatory. |
 | Network | VPC, one IPv6-enabled subnet, Internet Gateway, restrictive security group | The instance has no open inbound rule, no public IPv4, and FastAPI/Nginx are loopback-only. Outbound IPv6 is tested only for required Cloudflare and AWS services. |
 | Public ingress | Cloudflare Tunnel to `api.<domain>` | The tunnel's authenticated outbound connection replaces a public origin listener. Cloudflare owns public TLS; tunnel credentials are stored as a secret, never in image or Git. |
 | Image registry | ECR private repository | Image is tagged by Git SHA and deployed by immutable digest. |
@@ -101,13 +101,13 @@ The following is a conservative decision worksheet, **not** the final calculator
 
 | Item | Preliminary monthly amount | Basis | Decision use |
 |---|---:|---|---|
-| Linux `t3a.micro` in Singapore | Pending recalculation | The prior ARM64 and `t3a.small` prices are not transferable to this candidate. | New AWS Pricing Calculator result required. |
+| Linux `t3a.small` in Singapore | USD 17.23 | Existing calculator record, Linux shared tenancy, 730 hours. | Does not meet the normal-month gate after mandatory services. |
 | Public IPv4 | USD 0.00 | IPv6-only tunnel design | Direct IPv4 would add USD 3.65 and fail the normal gate. |
 | 20 GiB encrypted gp3 EBS | USD 1.92 | Public AWS Pricing Calculator input for `ap-southeast-1`; no extra IOPS or throughput | Calculator-verified, before snapshots. |
 | Daily snapshot allowance | USD 1.75 | Daily snapshots with 1 GiB changed per snapshot | This is a 30-day, 30 GiB incremental-snapshot assumption, not a full-volume copy each day. |
-| Core EC2 + EBS + snapshot | **USD 19.15** | Public AWS Pricing Calculator, on-demand Linux, 730 hours | Leaves only **USD 0.85** for ECR, S3, CloudWatch Logs, and any paid data transfer. |
+| Core EC2 + EBS + snapshot | **USD 20.90** | Existing calculator compute record plus EBS and snapshot assumptions | Already exceeds the USD 20 normal-month ceiling before ECR, S3, and CloudWatch Logs. |
 
-**Provisional conclusion:** B2 is the only in-scope topology that can still meet the budget, but its **normal-month gate is not yet passed**: its calculator-verified core is USD 19.15, so all remaining normal-use AWS services must fit within USD 0.85. B1 cannot meet the normal limit. No apply is approved until the complete normal and high estimates both pass.
+**Conclusion for the selected `t3a.small`:** the normal-month gate is **rejected**. Its core EC2, EBS, and snapshot estimate is USD 20.90 before mandatory operational services. No apply is approved unless the owner changes the approved ceiling or chooses a lower-cost design.
 
 ### Required estimator output
 
@@ -115,7 +115,7 @@ Before `terraform apply`, record:
 
 1. Selected AWS region and exact instance type.
 2. Normal-month and plausible-high-use estimates, excluding and including tax where applicable.
-3. Native x86_64 image build/smoke evidence and a staging memory/load result for the selected `t3a.micro` target.
+3. Native x86_64 image build/smoke evidence and a staging memory/load result for the selected `t3a.small` target.
 4. Any free-tier credit assumption, separately from sustainable recurring cost.
 5. A monthly AWS Budget: 50% actual, 80% forecast, and 100% actual/forecast alerts. Alerts notify only; they do not automatically stop production.
 
@@ -156,7 +156,7 @@ The owner authorized implementation of the reviewed code artifacts, while AWS cr
 | Implemented artifact | Purpose | Current evidence boundary |
 |---|---|---|
 | `infrastructure/state-bootstrap` | Encrypted, versioned S3 state bucket with S3 lockfile support | `terraform validate` passed; it has not been applied. |
-| `infrastructure/aws` | IPv6-only VPC/subnet/route, no-ingress origin security group, x86_64 `t3a.micro` EC2, encrypted gp3 root/data disk, ECR, S3 backup bucket, CloudWatch log group, SSM release pointers, IAM, Budget, and GitHub OIDC roles | `terraform validate` passed with the backend disabled; no plan or apply ran against an AWS account. |
+| `infrastructure/aws` | IPv6-only VPC/subnet/route, no-ingress origin security group, x86_64 `t3a.small` EC2, encrypted gp3 root/data disk, ECR, S3 backup bucket, CloudWatch log group, SSM release pointers, IAM, Budget, and GitHub OIDC roles | `terraform validate` passed with the backend disabled; staging plan is read-only and no apply has run. |
 | `SourceCode/deploy/aws` | Immutable-digest refresh, Cloudflare Tunnel container, 30-day log target, daily Chroma-only S3 backup timer, and no persistent chat database | Shell syntax and Compose rendering passed with inert test values; EC2/IPv6 runtime has not been tested. |
 | `.github/workflows/aws-validate.yml` | Terraform static checks plus native x86_64 backend build/health/catalog smoke gate | GitHub Actions run `36549156799` passed. |
 | `.github/workflows/aws-release.yml` | Manual release of the exact x86_64 image digests through OIDC, SSM, and a GitHub Environment approval gate | Defined locally but not enabled or run. Production approval must be configured in GitHub before use. |
@@ -195,7 +195,7 @@ Create one public AWS Pricing Calculator estimate for `ap-southeast-1`, on-deman
 
 | Service | Normal input | Plausible-high input | Cost control |
 |---|---|---|---|
-| EC2 | 1 × `t3a.micro`, 730 hours | same | No Savings Plan is assumed. |
+| EC2 | 1 × `t3a.small`, 730 hours | same | No Savings Plan is assumed. |
 | EBS gp3 | 20 GiB encrypted root/data capacity plus daily snapshots with 1 GiB changed per snapshot | 30 GiB capacity plus the same 30-day, 30 GiB incremental snapshot allowance | Do not provision extra IOPS or throughput. |
 | ECR private | 1 GiB retained images: current plus rollback | 4 GiB | Lifecycle policy deletes untagged images and retains only approved rollback candidates. |
 | S3 | 2 GiB for Terraform state, catalog/rebuild inputs, and compressed daily backups | 15 GiB | Versioned state; explicit lifecycle expiry for old noncurrent objects/backups. |
@@ -215,7 +215,7 @@ On 2026-09-29, the public AWS Pricing Calculator was configured for `ap-southeas
 
 The USD 0.85 remainder cannot cover the mandatory daily recovery path and operational services. Therefore the normal-month estimate cannot meet the approved USD 20 limit; a plausible-high estimate cannot repair a failed normal gate. This is a valid **REJECTED** result for `t3a.small`; it does not apply to the owner-approved `t3a.micro` candidate below.
 
-### Current x86_64 cost record — provisional pass
+### Superseded x86_64 cost record — `t3a.micro`
 
 The owner approved `t3a.micro` on 2026-09-29 to keep x86_64 while restoring cost headroom. AWS's current regional Price List identifies the Linux shared-tenancy SKU `XJCZNGBHQ4URRV67` at **USD 0.0118/hour**, or **USD 8.61/month** at 730 hours. This is the source of truth for the compute line while the public calculator UI is unavailable from this workstation.
 
@@ -230,7 +230,24 @@ The owner approved `t3a.micro` on 2026-09-29 to keep x86_64 while restoring cost
 | Internet egress / SSM / Budget | USD 0.00 | USD 0.00 | 20 GiB / 80 GiB remains within the shared 100 GiB AWS data-transfer allowance; standard Parameter Store and notification-only Budget. |
 | **Total before tax and external AI** | **USD 12.81** | **USD 16.30** | **Both remain below the approved USD 20 / USD 25 limits.** |
 
-This is a **provisional cost-gate pass**, not permission to apply. Before any apply, save the matching AWS Pricing Calculator estimate in the owner account and restore AWS CLI authentication to run the read-only `terraform plan`. Staging must then prove that the 1 GiB host completes health, catalog, backup/restore, and memory/load checks without swap pressure or OOM termination.
+This was a **provisional cost-gate pass for `t3a.micro` only**, and is not permission to apply the newly selected `t3a.small` configuration.
+
+### Current x86_64 cost record — `t3a.small` rejected under the current ceiling
+
+The existing Singapore calculator record prices Linux shared-tenancy `t3a.small` at USD 17.23 for 730 hours. Applying the same mandatory non-compute assumptions gives the following transparent working estimate:
+
+| Service | Normal month | Plausible-high month |
+|---|---:|---:|
+| Linux `t3a.small` | USD 17.23 | USD 17.23 |
+| Encrypted gp3 EBS | USD 1.92 | USD 2.88 |
+| Daily snapshot allowance | USD 1.75 | USD 1.75 |
+| ECR private images | USD 0.10 | USD 0.40 |
+| S3 state and backup inputs | USD 0.05 | USD 0.38 |
+| CloudWatch Logs | USD 0.38 | USD 2.28 |
+| Internet egress / SSM / Budget | USD 0.00 | USD 0.00 |
+| **Total before tax and external AI** | **USD 21.43** | **USD 24.92** |
+
+The high-use working estimate remains within USD 25, but the normal-month estimate exceeds the USD 20 ceiling by USD 1.43. Therefore this is a **rejected cost gate** under the owner-approved budget. A saved Pricing Calculator capture is still required if the owner later changes the ceiling; staging must prove that the 2 GiB host completes health, catalog, backup/restore, and memory/load checks without swap pressure or OOM termination.
 
 ### Execution tracker — 2026-09-29
 
@@ -238,10 +255,10 @@ This is a **provisional cost-gate pass**, not permission to apply. Before any ap
 |---|---|---|
 | Terraform and bootstrap static validation | Passed locally | Both configurations validate with remote backends disabled; no plan or apply against an AWS account. |
 | Native x86_64 workflow | Passed | GitHub Actions run `36549156799` built the x86_64 image and passed health/catalog smoke after the readiness repair. Instance memory remains a separate staging gate. |
-| Existing Vercel release verification | Waiting for human approval | The workflow now reads the two existing GitHub **Environment variables**, not secrets. Run `36551268257` is correctly paused at the protected Environment. |
+| Existing Vercel release verification | Passed | The workflow reads the two existing GitHub **Environment variables**, not secrets. Production health run `36562367656` passed after the required Environment approval. |
 | GitHub `Production` Environment | Configured | Required reviewer `mindu2kk`, `main`-only deployments, and no administrator bypass are enabled. The two approved URL variables remain in that Environment. |
-| AWS cost gate | Provisionally passed | Working total is USD 12.81 normal and USD 16.30 high before tax/external AI. Final calculator capture in the owner account remains required. |
-| AWS staging | Blocked by account auth and memory gate | AWS CLI session expired before read-only plan; after reauthentication, run plan and then use a short-lived staging host to prove the 1 GiB memory/load gate. |
+| AWS cost gate | Rejected for selected `t3a.small` | Working total is USD 21.43 normal and USD 24.92 high before tax/external AI; the normal estimate exceeds the approved USD 20 ceiling. |
+| AWS staging | Blocked by cost and memory gate | A read-only plan completed with 29 additions, 0 changes, and 0 destroys. Do not apply while the cost gate fails; after a cost decision, use a short-lived staging host to prove the 2 GiB memory/load gate. |
 
 ## Sources used for the estimate gate
 
