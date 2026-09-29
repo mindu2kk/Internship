@@ -46,11 +46,11 @@ variable "github_oidc_provider_arn" {
 variable "instance_type" {
   type        = string
   description = "Approved x86_64 Release 1 candidate. Change only through a reviewed architecture decision and new cost gate."
-  default     = "t3a.small"
+  default     = "t3a.micro"
 
   validation {
-    condition     = var.instance_type == "t3a.small"
-    error_message = "Release 1 is intentionally pinned to t3a.small until an approved architecture change is made."
+    condition     = var.instance_type == "t3a.micro"
+    error_message = "Release 1 is intentionally pinned to t3a.micro until an approved architecture change is made."
   }
 }
 
