@@ -1,6 +1,6 @@
 # AURA Phase 1 — AWS Architecture and Cost Gate
 
-**Status:** `t3a.small` is the selected x86_64 candidate. Its prior cost-gate result was rejected, so no Terraform apply is permitted unless the owner changes the USD 20 normal-month ceiling or a new complete estimate passes it. A 2 GiB staging memory/load result is also required.
+**Status:** `t3a.small` is the selected x86_64 candidate. The owner approved an AWS infrastructure budget of USD 23 normal / USD 28 plausible-high on 2026-09-29. The working estimate passes this revised gate; a saved calculator estimate and a 2 GiB staging memory/load result remain required before any Terraform apply.
 **Date:** 2026-09-29
 **Depends on:** `DEVOPS_PHASE_0_PRODUCTION_CONTRACT.md`
 
@@ -9,7 +9,7 @@
 The owner approved the following Release 1 constraints on 2026-09-27:
 
 - Cloudflare is the DNS/proxy provider; `www` stays on Vercel and the actual production domain stays private until DNS work.
-- The sustainable AWS limit is USD 20 in a normal month and USD 25 under plausible high use. A calculator result above either threshold prohibits `terraform apply`.
+- The sustainable AWS infrastructure limit is USD 23 in a normal month and USD 28 under plausible high use. A calculator result above either threshold prohibits `terraform apply`. External-AI usage and tax are outside this infrastructure gate.
 - x86_64 `t3a.small` is the selected compute candidate. This architecture change invalidates the prior `t3a.micro` cost-gate pass and requires a new cost decision before any apply.
 - Chroma uses encrypted EBS and must have a daily S3 backup/rebuild path proven in staging for the 24-hour RPO.
 - The resource scope is frozen to VPC/networking, EC2, encrypted EBS, IAM, ECR, S3, SSM, CloudWatch, secrets, and AWS Budget. ALB, NAT Gateway, RDS, ASG, Kubernetes, and multi-AZ replicas are deferred.
@@ -17,21 +17,21 @@ The owner approved the following Release 1 constraints on 2026-09-27:
 
 ## 2. Cost-driven architecture correction
 
-Phase 0 approved a USD 20 target and USD 25 hard monthly ceiling. The original proposal of an AWS Application Load Balancer (ALB) in front of EC2 is technically sound, but it is not compatible with that first-release budget.
+Phase 0 now approves a USD 23 normal target and USD 28 hard monthly infrastructure ceiling. The original proposal of an AWS Application Load Balancer (ALB) in front of EC2 is technically sound, but it is not compatible with that first-release budget.
 
 AWS bills an ALB for every running hour and for Load Balancer Capacity Units. AWS's published US-East example puts the hourly ALB base rate at USD 0.0225, or about USD 16.43 for 730 hours before LCU usage; a `t3a.small` reference price in the same region is USD 0.0188/hour, about USD 13.72/month before storage, public IPv4, backup, logs, or transfer. This already exceeds the hard ceiling and South-East Asia pricing can differ. The pricing gate therefore rejects **ALB + EC2** for the first release.
 
 NAT Gateway is also excluded from the initial topology because it adds both an hourly and per-GB processing charge.
 
-A direct public IPv4 address on EC2 is also too expensive for the normal-month limit. AWS charges USD 0.005 per hour for one public IPv4 address, or USD 3.65 for 730 hours. The exact Singapore `t3a.micro` rate requires a new AWS Pricing Calculator run, so no cost conclusion is claimed from the prior `t3a.small` result. The public-IPv4 surcharge remains a known budget risk; the IPv6-only tunnel design stays the selected candidate pending proof.
+A direct public IPv4 address on EC2 is also too expensive for the normal-month limit. AWS charges USD 0.005 per hour for one public IPv4 address, or USD 3.65 for 730 hours. Adding that recurring charge to the `t3a.small` normal working estimate would produce USD 25.08 before tax and external AI, above the USD 23 target. The IPv6-only tunnel design stays the selected candidate pending final calculator and staging proof.
 
 ## 3. Candidate architectures
 
 | Option | Description | Production properties | Cost-gate result |
 |---|---|---|---|
 | A — ALB + EC2 | Public ALB, EC2 private target, ACM TLS | Best network isolation and upgrade path to multiple instances | **Rejected for Release 1:** fixed ALB cost plus EC2 exceeds USD 25 before normal operational extras. |
-| B1 — Cloudflare + public-IPv4 EC2 | Cloudflare proxies `api` to HTTPS Nginx/FastAPI on EC2 | No public SSH or FastAPI; one compute single point of failure | **Rejected:** public IPv4 means the normal-month floor already consumes the USD 20 budget. |
-| B2 — Cloudflare Tunnel + IPv6-only EC2 | Cloudflare Tunnel makes an outbound connection from EC2 to Cloudflare; tunnel forwards locally to Nginx/FastAPI | No Internet ingress, no public IPv4, one compute single point of failure | **Selected candidate with `t3a.small`:** the current USD 20 normal-month gate fails; a budget change or lower-cost design is required before staging. |
+| B1 — Cloudflare + public-IPv4 EC2 | Cloudflare proxies `api` to HTTPS Nginx/FastAPI on EC2 | No public SSH or FastAPI; one compute single point of failure | **Rejected:** public IPv4 removes the normal-month headroom and keeps an Internet-reachable origin. |
+| B2 — Cloudflare Tunnel + IPv6-only EC2 | Cloudflare Tunnel makes an outbound connection from EC2 to Cloudflare; tunnel forwards locally to Nginx/FastAPI | No Internet ingress, no public IPv4, one compute single point of failure | **Selected candidate with `t3a.small`:** working USD 23/USD 28 gate passes; saved calculator and staging connectivity/memory evidence are still required. |
 | C — ALB/ASG | ALB with at least two application instances and rolling replacement | Higher availability and safer host replacement | **Deferred:** revisit after measured demand or a higher budget. |
 
 This is an explicit trade-off: Release 1 targets recoverability and controlled deployment, not multi-AZ high availability. It remains consistent with the accepted 99.5% availability objective.
@@ -87,7 +87,7 @@ This is a bill-of-material and risk gate, **not a quote**. Prices vary by region
 | Cost item | Release 1 approach | Budget treatment |
 |---|---|---|
 | EC2 | One 2 GiB candidate, on demand | Largest fixed item; select only after memory/load test. |
-| Public IPv4 | None; use IPv6-only EC2 with Cloudflare Tunnel | Required to preserve the USD 20 normal-month headroom. A direct-public-IPv4 variant is rejected. |
+| Public IPv4 | None; use IPv6-only EC2 with Cloudflare Tunnel | Required to preserve normal-month headroom and avoid an Internet-reachable origin. A direct-public-IPv4 variant is rejected. |
 | EBS | Small encrypted gp3 volume for OS and Chroma | Size from measured Chroma growth; snapshots are separate. |
 | ECR | Small immutable image retention set | Retain current and rollback images; lifecycle-delete old images. |
 | S3 | Terraform state and compact daily backup/rebuild inputs | Versioned state; lifecycle policy for old backup versions. |
@@ -101,13 +101,13 @@ The following is a conservative decision worksheet, **not** the final calculator
 
 | Item | Preliminary monthly amount | Basis | Decision use |
 |---|---:|---|---|
-| Linux `t3a.small` in Singapore | USD 17.23 | Existing calculator record, Linux shared tenancy, 730 hours. | Does not meet the normal-month gate after mandatory services. |
+| Linux `t3a.small` in Singapore | USD 17.23 | Existing calculator record, Linux shared tenancy, 730 hours. | Fits the revised normal-month gate after mandatory services, subject to final calculator capture. |
 | Public IPv4 | USD 0.00 | IPv6-only tunnel design | Direct IPv4 would add USD 3.65 and fail the normal gate. |
 | 20 GiB encrypted gp3 EBS | USD 1.92 | Public AWS Pricing Calculator input for `ap-southeast-1`; no extra IOPS or throughput | Calculator-verified, before snapshots. |
 | Daily snapshot allowance | USD 1.75 | Daily snapshots with 1 GiB changed per snapshot | This is a 30-day, 30 GiB incremental-snapshot assumption, not a full-volume copy each day. |
-| Core EC2 + EBS + snapshot | **USD 20.90** | Existing calculator compute record plus EBS and snapshot assumptions | Already exceeds the USD 20 normal-month ceiling before ECR, S3, and CloudWatch Logs. |
+| Core EC2 + EBS + snapshot | **USD 20.90** | Existing calculator compute record plus EBS and snapshot assumptions | Leaves USD 2.10 within the USD 23 normal-month infrastructure target for bounded operational services. |
 
-**Conclusion for the selected `t3a.small`:** the normal-month gate is **rejected**. Its core EC2, EBS, and snapshot estimate is USD 20.90 before mandatory operational services. No apply is approved unless the owner changes the approved ceiling or chooses a lower-cost design.
+**Conclusion for the selected `t3a.small`:** the working normal-month gate **passes** under the owner-approved USD 23/USD 28 infrastructure limits. Its core EC2, EBS, and snapshot estimate is USD 20.90; bounded ECR, S3, and CloudWatch assumptions keep the full normal scenario within the revised target. No apply is approved until the complete saved calculator estimate confirms both scenarios.
 
 ### Required estimator output
 
@@ -136,7 +136,7 @@ Phase 1 design is approved when all items below are recorded and reviewed:
 
 - [x] Owner chose Cloudflare for Release 1.
 - [x] Owner will provide the actual domain privately when DNS work begins; no domain is written into public source until approved.
-- [ ] AWS Pricing Calculator estimate for the selected region/instance satisfies USD 20 normal and USD 25 high-use thresholds.
+- [ ] AWS Pricing Calculator estimate for the selected region/instance satisfies USD 23 normal and USD 28 high-use infrastructure thresholds.
 - [ ] Native x86_64 image choice is proven by a CI build/smoke test.
 - [x] Chroma recovery requires encrypted EBS plus a daily backup/rebuild path and staging restore test.
 - [x] Terraform resource list is frozen before any apply.
@@ -213,7 +213,7 @@ On 2026-09-28, a calculator exploration for Linux `t4g.small` produced a working
 
 On 2026-09-29, the public AWS Pricing Calculator was configured for `ap-southeast-1`, Linux, shared tenancy, one on-demand `t3a.small` instance, and 730 hours/month. It reported **USD 17.23/month for the instance alone**. The required 20 GiB gp3 EBS volume adds USD 1.92/month, producing a **USD 19.15/month minimum before snapshots, ECR, S3 backups, CloudWatch Logs, data transfer, or tax**.
 
-The USD 0.85 remainder cannot cover the mandatory daily recovery path and operational services. Therefore the normal-month estimate cannot meet the approved USD 20 limit; a plausible-high estimate cannot repair a failed normal gate. This is a valid **REJECTED** result for `t3a.small`; it does not apply to the owner-approved `t3a.micro` candidate below.
+Under the previous USD 20/USD 25 ceiling, the USD 0.85 remainder could not cover the mandatory daily recovery path and operational services. That was a valid **rejected** result for `t3a.small` at the time. The owner later approved the USD 23/USD 28 infrastructure budget recorded above, so this historical decision does not govern the current target.
 
 ### Superseded x86_64 cost record — `t3a.micro`
 
@@ -228,11 +228,11 @@ The owner approved `t3a.micro` on 2026-09-29 to keep x86_64 while restoring cost
 | S3 state and backup inputs | USD 0.05 | USD 0.38 | 2 GiB / 15 GiB with lifecycle controls. |
 | CloudWatch Logs | USD 0.38 | USD 2.28 | 0.5 GiB / 3 GiB ingest, 30-day retention. |
 | Internet egress / SSM / Budget | USD 0.00 | USD 0.00 | 20 GiB / 80 GiB remains within the shared 100 GiB AWS data-transfer allowance; standard Parameter Store and notification-only Budget. |
-| **Total before tax and external AI** | **USD 12.81** | **USD 16.30** | **Both remain below the approved USD 20 / USD 25 limits.** |
+| **Total before tax and external AI** | **USD 12.81** | **USD 16.30** | **Both remained below the then-approved USD 20 / USD 25 limits.** |
 
 This was a **provisional cost-gate pass for `t3a.micro` only**, and is not permission to apply the newly selected `t3a.small` configuration.
 
-### Current x86_64 cost record — `t3a.small` rejected under the current ceiling
+### Current x86_64 cost record — `t3a.small` provisional pass under the revised ceiling
 
 The existing Singapore calculator record prices Linux shared-tenancy `t3a.small` at USD 17.23 for 730 hours. Applying the same mandatory non-compute assumptions gives the following transparent working estimate:
 
@@ -247,7 +247,7 @@ The existing Singapore calculator record prices Linux shared-tenancy `t3a.small`
 | Internet egress / SSM / Budget | USD 0.00 | USD 0.00 |
 | **Total before tax and external AI** | **USD 21.43** | **USD 24.92** |
 
-The high-use working estimate remains within USD 25, but the normal-month estimate exceeds the USD 20 ceiling by USD 1.43. Therefore this is a **rejected cost gate** under the owner-approved budget. A saved Pricing Calculator capture is still required if the owner later changes the ceiling; staging must prove that the 2 GiB host completes health, catalog, backup/restore, and memory/load checks without swap pressure or OOM termination.
+Both working estimates are within the owner-approved USD 23 normal / USD 28 plausible-high infrastructure limits. Therefore this is a **provisional cost-gate pass**, not permission to apply: tax and external-AI usage are excluded, and a saved AWS Pricing Calculator capture must confirm the selected region and assumptions. Staging must then prove that the 2 GiB host completes health, catalog, backup/restore, and memory/load checks without swap pressure or OOM termination.
 
 ### Execution tracker — 2026-09-29
 
@@ -257,8 +257,8 @@ The high-use working estimate remains within USD 25, but the normal-month estima
 | Native x86_64 workflow | Passed | GitHub Actions run `36549156799` built the x86_64 image and passed health/catalog smoke after the readiness repair. Instance memory remains a separate staging gate. |
 | Existing Vercel release verification | Passed | The workflow reads the two existing GitHub **Environment variables**, not secrets. Production health run `36562367656` passed after the required Environment approval. |
 | GitHub `Production` Environment | Configured | Required reviewer `mindu2kk`, `main`-only deployments, and no administrator bypass are enabled. The two approved URL variables remain in that Environment. |
-| AWS cost gate | Rejected for selected `t3a.small` | Working total is USD 21.43 normal and USD 24.92 high before tax/external AI; the normal estimate exceeds the approved USD 20 ceiling. |
-| AWS staging | Blocked by cost and memory gate | A read-only plan completed with 29 additions, 0 changes, and 0 destroys. Do not apply while the cost gate fails; after a cost decision, use a short-lived staging host to prove the 2 GiB memory/load gate. |
+| AWS cost gate | Provisionally passed for selected `t3a.small` | Working total is USD 21.43 normal and USD 24.92 high before tax/external AI; both are within the approved USD 23/USD 28 infrastructure gate. A saved calculator capture remains required. |
+| AWS staging | Blocked by final calculator and memory gate | A read-only plan completed with 29 additions, 0 changes, and 0 destroys. After saving the calculator evidence, use a short-lived staging host to prove the 2 GiB memory/load gate before promotion. |
 
 ## Sources used for the estimate gate
 

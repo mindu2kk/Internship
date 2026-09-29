@@ -324,7 +324,7 @@ resource "aws_instance" "origin" {
 resource "aws_budgets_budget" "monthly" {
   name         = "${local.name_prefix}-monthly-cap"
   budget_type  = "COST"
-  limit_amount = "25"
+  limit_amount = "28"
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 

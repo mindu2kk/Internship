@@ -12,7 +12,7 @@ terraform -chdir=infrastructure/aws validate
 terraform -chdir=infrastructure/aws fmt -check -recursive
 ```
 
-Do not run `apply` until all Phase 1 evidence in `../DEVOPS_PHASE_1_ARCHITECTURE_AND_COST.md` is complete. In particular, a complete calculator estimate for the selected x86_64 `t3a.small` must be within USD 20 normal and USD 25 plausible-high use, native x86_64 CI must pass, and a short-lived staging tunnel plus memory/load test must prove the 2 GiB instance is adequate.
+Do not run `apply` until all Phase 1 evidence in `../DEVOPS_PHASE_1_ARCHITECTURE_AND_COST.md` is complete. In particular, a complete calculator estimate for the selected x86_64 `t3a.small` must be within USD 23 normal and USD 28 plausible-high AWS infrastructure use, native x86_64 CI must pass, and a short-lived staging tunnel plus memory/load test must prove the 2 GiB instance is adequate.
 
 ## State bootstrap and environments
 

@@ -22,7 +22,7 @@ These are planning assumptions, not measured production results. A load test bef
 |---|---|
 | Domain ownership | Managed by the owner. |
 | DNS | Cloudflare for Release 1. `www` remains on Vercel; `api` is served through Cloudflare to the AWS origin. |
-| Monthly infrastructure and AI budget | Target USD 20; hard ceiling USD 25. |
+| Monthly AWS infrastructure budget | Target USD 23; hard ceiling USD 28. External-AI usage is budgeted separately. |
 | Cost controls | Enable budget and forecast alerts before creating billable production resources. |
 | Chat-history retention | No long-term server-side chat-history storage in the first release. |
 | Audit/log retention | 30 days. |
@@ -46,7 +46,7 @@ The availability target deliberately permits a single-instance launch. It does *
 
 ### Cost guardrail
 
-Before any billable production resource is created, Phase 1 must produce a region-specific AWS Pricing Calculator estimate. The design is rejected if the normal monthly estimate exceeds USD 20 or the plausible high-use estimate exceeds USD 25. The initial AWS Budget configuration must notify the owner at 50% actual spend, 80% forecast spend, and 100% actual or forecast spend; it must not automatically delete or stop production resources.
+Before any billable production resource is created, Phase 1 must produce a region-specific AWS Pricing Calculator estimate. The design is rejected if the normal monthly infrastructure estimate exceeds USD 23 or the plausible high-use estimate exceeds USD 28. The initial AWS Budget configuration must notify the owner at 50% actual spend, 80% forecast spend, and 100% actual or forecast spend; it must not automatically delete or stop production resources.
 
 ## 3. Architecture decisions
 
@@ -54,7 +54,7 @@ Before any billable production resource is created, Phase 1 must produce a regio
 |---|---|---|---|
 | ADR-01 | Keep the existing Vercel frontend for the first AWS backend release. Use `www` for frontend and `api` for the AWS API. | Approved | Avoids a simultaneous frontend-hosting migration. |
 | ADR-02 | Use Cloudflare as the Release 1 DNS/proxy provider. | Approved | Keeps `www` on Vercel and provides the public API edge without an ALB. |
-| ADR-03 | Run the FastAPI Docker workload on one x86_64 `t3a.small` EC2 with encrypted EBS. | Selected; cost gate reset | Provides 2 GiB memory for the x86_64 container path. It must pass the USD 20/USD 25 cost gate and staging memory/load and recovery checks before production use. |
+| ADR-03 | Run the FastAPI Docker workload on one x86_64 `t3a.small` EC2 with encrypted EBS. | Selected | Provides 2 GiB memory for the x86_64 container path. It must pass the USD 23/USD 28 infrastructure cost gate and staging memory/load and recovery checks before production use. |
 | ADR-04 | Use a Cloudflare Tunnel to an IPv6-only EC2 origin if, and only if, its cost calculation and staging connectivity tests pass. No SSH, FastAPI port, or public IPv4 is exposed. | Proposed replacement | This is the cost-compatible way to remove the public-IPv4 charge and inbound attack surface. It must be proven before selection. |
 | ADR-05 | Use Amazon ECR private repository for the AWS production image. | Approved | GitHub Actions and EC2 can use scoped IAM roles without a long-lived GHCR pull token. |
 | ADR-06 | Use GitHub Actions OIDC to assume a narrowly scoped AWS deployment role. | Approved | No long-lived AWS access keys in GitHub. |
