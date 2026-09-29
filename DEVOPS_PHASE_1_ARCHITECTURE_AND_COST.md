@@ -220,7 +220,7 @@ Before any billable AWS action, create two AWS Pricing Calculator scenarios for 
 | Terraform and bootstrap static validation | Passed locally | Both configurations validate with remote backends disabled; no plan or apply against an AWS account. |
 | Native x86_64 workflow | Defined, not yet run | It requires the scoped DevOps commit to reach GitHub Actions. |
 | Existing Vercel release verification | Repaired in source, not yet run | It now gives a clear missing-URL error and permits a human-approved manual health verification without removing the automatic post-CI gate. |
-| GitHub `production` Environment | Pending owner configuration | Add `VERCEL_PRODUCTION_URL` and `BACKEND_HEALTH_URL`; require a reviewer before allowing a production workflow run. |
+| GitHub `production` Environment | Pending owner configuration | Add `VERCEL_PRODUCTION_URL` and `BACKEND_HEALTH_URL` as Environment secrets; require a reviewer before allowing a production workflow run. |
 | AWS cost gate | Pending | Run the calculator for the selected `t3a.small`; old ARM64 numbers are invalid. |
 | AWS staging | Blocked by prior gates | Requires an approved estimate, native CI evidence, and explicit AWS account configuration. |
 
