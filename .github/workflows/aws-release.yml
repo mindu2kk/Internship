@@ -1,0 +1,100 @@
+name: AWS release
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment. Production requires GitHub Environment approval.
+        required: true
+        type: choice
+        options: [staging, production]
+      confirmation:
+        description: Type RELEASE after the calculator and staging gates are approved.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build, publish, and refresh ${{ inputs.environment }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: ${{ inputs.environment }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      ECR_BACKEND_REPOSITORY: ${{ vars.ECR_BACKEND_REPOSITORY }}
+      ECR_FRONTEND_REPOSITORY: ${{ vars.ECR_FRONTEND_REPOSITORY }}
+      SSM_BACKEND_RELEASE_PARAMETER: ${{ vars.SSM_BACKEND_RELEASE_PARAMETER }}
+      SSM_FRONTEND_RELEASE_PARAMETER: ${{ vars.SSM_FRONTEND_RELEASE_PARAMETER }}
+      PROJECT: aura
+    steps:
+      - name: Enforce release gates before cloud actions
+        run: |
+          test "${{ inputs.confirmation }}" = "RELEASE"
+          test "${{ vars.PHASE_1_COST_GATE }}" = "approved"
+          test -n "$AWS_REGION"
+          test -n "$ECR_BACKEND_REPOSITORY"
+          test -n "$ECR_FRONTEND_REPOSITORY"
+          test -n "$SSM_BACKEND_RELEASE_PARAMETER"
+          test -n "$SSM_FRONTEND_RELEASE_PARAMETER"
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and publish immutable x86_64 backend image
+        id: backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./SourceCode
+          file: ./SourceCode/Dockerfile.backend
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPOSITORY }}:sha-${{ github.sha }}
+      - name: Build and publish immutable x86_64 Nginx proxy image
+        id: frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./SourceCode
+          file: ./SourceCode/Dockerfile.frontend
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:sha-${{ github.sha }}
+      - name: Point SSM release parameters to exact image digests
+        run: |
+          aws ssm put-parameter --overwrite --type String \
+            --name "$SSM_BACKEND_RELEASE_PARAMETER" \
+            --value "${{ steps.ecr.outputs.registry }}/$ECR_BACKEND_REPOSITORY@${{ steps.backend.outputs.digest }}"
+          aws ssm put-parameter --overwrite --type String \
+            --name "$SSM_FRONTEND_RELEASE_PARAMETER" \
+            --value "${{ steps.ecr.outputs.registry }}/$ECR_FRONTEND_REPOSITORY@${{ steps.frontend.outputs.digest }}"
+      - name: Refresh only the tagged target instance through Session Manager
+        id: refresh
+        run: |
+          instance_id="$(aws ec2 describe-instances \
+            --filters "Name=tag:Project,Values=$PROJECT" "Name=tag:Environment,Values=${{ inputs.environment }}" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)"
+          test -n "$instance_id"
+          test "$(wc -w <<< "$instance_id")" -eq 1
+          command_id="$(aws ssm send-command \
+            --document-name AWS-RunShellScript \
+            --instance-ids "$instance_id" \
+            --parameters 'commands=["sudo /usr/local/bin/aura-refresh"]' \
+            --query 'Command.CommandId' --output text)"
+          echo "instance_id=$instance_id" >> "$GITHUB_OUTPUT"
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+      - name: Wait for the instance-side health gate
+        run: |
+          aws ssm wait command-executed --command-id "${{ steps.refresh.outputs.command_id }}" --instance-id "${{ steps.refresh.outputs.instance_id }}"
+          aws ssm get-command-invocation --command-id "${{ steps.refresh.outputs.command_id }}" --instance-id "${{ steps.refresh.outputs.instance_id }}" --output json

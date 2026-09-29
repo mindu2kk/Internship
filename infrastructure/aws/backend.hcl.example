@@ -1,0 +1,6 @@
+# Copy outside the repository, replace the bucket name, and keep it private.
+bucket       = "aura-123456789012-tfstate"
+key          = "aura/staging/terraform.tfstate"
+region       = "ap-southeast-1"
+encrypt      = true
+use_lockfile = true

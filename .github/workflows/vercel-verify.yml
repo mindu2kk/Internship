@@ -4,6 +4,20 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type VERIFY to run a manually approved production health check.
+        required: true
+        type: string
+      vercel_production_url:
+        description: Optional HTTPS frontend URL. Defaults to the production Environment variable.
+        required: false
+        type: string
+      backend_health_url:
+        description: Optional HTTPS backend base URL. Defaults to the production Environment variable.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -11,19 +25,30 @@ permissions:
 jobs:
   production-health:
     if: >-
+      (github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main'
+      github.event.workflow_run.head_branch == 'main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.confirmation == 'VERIFY')
     environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Verify the Vercel deployment serving the validated commit
+      - name: Validate production-health configuration
         env:
-          VERCEL_PRODUCTION_URL: ${{ vars.VERCEL_PRODUCTION_URL }}
-          BACKEND_HEALTH_URL: ${{ vars.BACKEND_HEALTH_URL }}
+          VERCEL_PRODUCTION_URL: ${{ inputs.vercel_production_url || vars.VERCEL_PRODUCTION_URL }}
+          BACKEND_HEALTH_URL: ${{ inputs.backend_health_url || vars.BACKEND_HEALTH_URL }}
         run: |
-          test -n "$VERCEL_PRODUCTION_URL"
-          test -n "$BACKEND_HEALTH_URL"
-          curl --fail --retry 12 --retry-delay 5 "$VERCEL_PRODUCTION_URL/"
-          curl --fail --retry 12 --retry-delay 5 "$BACKEND_HEALTH_URL/health"
+          if test -z "$VERCEL_PRODUCTION_URL" || test -z "$BACKEND_HEALTH_URL"; then
+            echo '::error title=Missing production URLs::Set VERCEL_PRODUCTION_URL and BACKEND_HEALTH_URL in the GitHub production Environment, or supply both manual inputs.'
+            exit 1
+          fi
+          case "$VERCEL_PRODUCTION_URL" in https://*) ;; *) echo '::error title=Invalid frontend URL::VERCEL_PRODUCTION_URL must use HTTPS.'; exit 1;; esac
+          case "$BACKEND_HEALTH_URL" in https://*) ;; *) echo '::error title=Invalid backend URL::BACKEND_HEALTH_URL must use HTTPS.'; exit 1;; esac
+      - name: Verify public frontend and backend health
+        env:
+          VERCEL_PRODUCTION_URL: ${{ inputs.vercel_production_url || vars.VERCEL_PRODUCTION_URL }}
+          BACKEND_HEALTH_URL: ${{ inputs.backend_health_url || vars.BACKEND_HEALTH_URL }}
+        run: |
+          curl --fail --show-error --retry 12 --retry-delay 5 "$VERCEL_PRODUCTION_URL/"
+          curl --fail --show-error --retry 12 --retry-delay 5 "$BACKEND_HEALTH_URL/health"

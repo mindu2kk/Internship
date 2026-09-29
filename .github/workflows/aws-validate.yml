@@ -1,0 +1,87 @@
+name: AWS Phase 1 validation
+
+on:
+  pull_request:
+    paths:
+      - infrastructure/**
+      - SourceCode/deploy/aws/**
+      - SourceCode/Dockerfile.backend
+      - SourceCode/requirements.txt
+      - .github/workflows/aws-validate.yml
+  push:
+    branches: [main]
+    paths:
+      - infrastructure/**
+      - SourceCode/deploy/aws/**
+      - SourceCode/Dockerfile.backend
+      - SourceCode/requirements.txt
+      - .github/workflows/aws-validate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-phase-1-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform-and-bootstrap:
+    name: Terraform and bootstrap validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.2
+      - name: Format Terraform
+        run: terraform fmt -check -recursive infrastructure
+      - name: Validate state bootstrap without a backend
+        run: |
+          terraform -chdir=infrastructure/state-bootstrap init -backend=false
+          terraform -chdir=infrastructure/state-bootstrap validate
+      - name: Validate release infrastructure without a backend
+        run: |
+          terraform -chdir=infrastructure/aws init -backend=false
+          terraform -chdir=infrastructure/aws validate
+      - name: Validate Linux bootstrap scripts
+        run: |
+          bash -n SourceCode/deploy/aws/refresh.sh
+          bash -n SourceCode/deploy/aws/backup.sh
+          if grep -rIU $'\r' infrastructure SourceCode/deploy/aws; then
+            echo 'Linux bootstrap files must use LF line endings.' >&2
+            exit 1
+          fi
+
+  x86_64-backend-smoke:
+    name: x86_64 backend build and smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build backend for the t3a architecture
+        uses: docker/build-push-action@v6
+        with:
+          context: ./SourceCode
+          file: ./SourceCode/Dockerfile.backend
+          platforms: linux/amd64
+          tags: aura-backend:x86_64-ci
+          load: true
+          cache-from: type=gha,scope=x86_64-backend
+          cache-to: type=gha,mode=max,scope=x86_64-backend
+      - name: Run architecture-specific health and catalog smoke test
+        run: |
+          docker run --detach --rm --name aura-x86_64-smoke --platform linux/amd64 \
+            -p 8000:8000 \
+            -e ENABLE_EXTERNAL_AI_WORKFLOW=false \
+            -e ENABLE_LLM_DECISION_PHRASING=false \
+            aura-backend:x86_64-ci
+          curl --fail --retry 20 --retry-connrefused http://127.0.0.1:8000/health
+          curl --fail --retry 10 --retry-connrefused 'http://127.0.0.1:8000/api/products?limit=1'
+      - if: always()
+        name: Collect x86_64 container logs
+        run: |
+          docker logs aura-x86_64-smoke || true
+          docker rm -f aura-x86_64-smoke || true

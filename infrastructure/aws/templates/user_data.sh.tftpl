@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+
+export AURA_SSM_REGION='${aws_region}'
+ssm_config=/etc/amazon/ssm/amazon-ssm-agent.json
+if [[ ! -f "$ssm_config" ]]; then
+  cp /etc/amazon/ssm/amazon-ssm-agent.json.template "$ssm_config"
+fi
+python3 - "$ssm_config" <<'PY'
+import json
+import os
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    config = json.load(handle)
+agent = config.setdefault("Agent", {})
+agent["Region"] = os.environ["AURA_SSM_REGION"]
+agent["UseDualStackEndpoint"] = True
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(config, handle, indent=2)
+    handle.write("\n")
+PY
+systemctl restart amazon-ssm-agent
+
+dnf update -y
+dnf install -y docker curl tar
+if ! docker compose version >/dev/null 2>&1; then
+  dnf install -y docker-compose-plugin
+fi
+systemctl enable --now docker
+
+install -d -m 0750 /srv/aura /srv/aura/data/chroma /srv/aura/logs /srv/aura/backups /etc/aura
+
+cat > /etc/aura/deploy.env <<'EOF'
+AWS_REGION=${aws_region}
+AWS_ACCOUNT_ID=${account_id}
+BACKUP_BUCKET=${backup_bucket}
+BACKEND_RELEASE_PARAMETER=${backend_release_parameter_name}
+FRONTEND_RELEASE_PARAMETER=${frontend_release_parameter_name}
+FRONTEND_URL_PARAMETER=${frontend_url_parameter_name}
+CLOUDFLARED_IMAGE_PARAMETER=${cloudflared_image_parameter_name}
+CLOUDFLARE_TUNNEL_PARAMETER=${cloudflare_tunnel_parameter_name}
+AURA_LOG_GROUP=${log_group_name}
+EOF
+chmod 0600 /etc/aura/deploy.env
+
+cat > /etc/aura/runtime-secret-parameters <<'EOF'
+${runtime_secret_parameters}
+EOF
+chmod 0600 /etc/aura/runtime-secret-parameters
+
+echo '${compose_file_b64}' | base64 --decode > /srv/aura/docker-compose.aws.yml
+echo '${refresh_file_b64}' | base64 --decode > /usr/local/bin/aura-refresh
+echo '${backup_file_b64}' | base64 --decode > /usr/local/bin/aura-backup
+chmod 0700 /usr/local/bin/aura-refresh /usr/local/bin/aura-backup
+
+cat > /etc/systemd/system/aura-backup.service <<'EOF'
+[Unit]
+Description=AURA encrypted daily data backup
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/aura-backup
+EOF
+
+cat > /etc/systemd/system/aura-backup.timer <<'EOF'
+[Unit]
+Description=Run AURA backup once per day
+
+[Timer]
+OnCalendar=*-*-* 02:15:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now aura-backup.timer
+
+# The image and tunnel token are intentionally unavailable until their SSM
+# parameters are populated. A release workflow invokes aura-refresh via SSM.

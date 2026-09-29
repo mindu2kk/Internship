@@ -1,0 +1,5 @@
+environment        = "staging"
+budget_alert_email = "owner@example.com"
+
+# Do not add Cloudflare tokens or AI keys here. Create them as SecureString
+# parameters out of state under /aura/staging/ instead.
