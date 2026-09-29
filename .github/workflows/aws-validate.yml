@@ -73,13 +73,37 @@ jobs:
           cache-to: type=gha,mode=max,scope=x86_64-backend
       - name: Run architecture-specific health and catalog smoke test
         run: |
+          wait_for_http() {
+            local url="$1"
+            local max_attempts="$2"
+
+            for attempt in $(seq 1 "$max_attempts"); do
+              if curl --fail --silent --show-error --max-time 5 "$url"; then
+                return 0
+              fi
+
+              if ! docker inspect --format '{{.State.Running}}' aura-x86_64-smoke | grep -qx true; then
+                echo "Container stopped before ${url} became ready." >&2
+                docker logs aura-x86_64-smoke || true
+                return 1
+              fi
+
+              echo "Waiting for ${url} (${attempt}/${max_attempts})..."
+              sleep 2
+            done
+
+            echo "Timed out waiting for ${url}." >&2
+            docker logs aura-x86_64-smoke || true
+            return 1
+          }
+
           docker run --detach --rm --name aura-x86_64-smoke --platform linux/amd64 \
             -p 8000:8000 \
             -e ENABLE_EXTERNAL_AI_WORKFLOW=false \
             -e ENABLE_LLM_DECISION_PHRASING=false \
             aura-backend:x86_64-ci
-          curl --fail --retry 20 --retry-connrefused http://127.0.0.1:8000/health
-          curl --fail --retry 10 --retry-connrefused 'http://127.0.0.1:8000/api/products?limit=1'
+          wait_for_http http://127.0.0.1:8000/health 30
+          wait_for_http 'http://127.0.0.1:8000/api/products?limit=1' 10
       - if: always()
         name: Collect x86_64 container logs
         run: |

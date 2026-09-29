@@ -8,7 +8,7 @@ In **Settings → Environments → production**:
 
 1. Add the owner as a required reviewer. A deployment pauses until that person approves it.
 2. Restrict deployments to the `main` branch.
-3. Add these Environment secrets:
+3. Add these Environment variables:
 
 | Variable | Value at the current pre-AWS stage |
 |---|---|
@@ -21,7 +21,7 @@ The existing verifier adds `/` to the frontend URL and `/health` to the backend 
 
 Push a commit to `main`. A successful `CI` workflow automatically starts **Verify Vercel production** in the protected production Environment. The reviewer approves it only after the intended Vercel deployment is live.
 
-For a controlled retry, run **Verify Vercel production** manually, type `VERIFY`, and either rely on the Environment secrets or enter both HTTPS URLs as workflow inputs. This is a health check only; it does not deploy application code.
+For a controlled retry, run **Verify Vercel production** manually, type `VERIFY`, and either rely on the Environment variables or enter both HTTPS URLs as workflow inputs. This is a health check only; it does not deploy application code.
 
 ## 3. Configure AWS only after the Phase 1 gates pass
 
