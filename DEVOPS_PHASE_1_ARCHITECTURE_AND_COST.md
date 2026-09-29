@@ -215,9 +215,22 @@ On 2026-09-29, the public AWS Pricing Calculator was configured for `ap-southeas
 
 The USD 0.85 remainder cannot cover the mandatory daily recovery path and operational services. Therefore the normal-month estimate cannot meet the approved USD 20 limit; a plausible-high estimate cannot repair a failed normal gate. This is a valid **REJECTED** result for `t3a.small`; it does not apply to the owner-approved `t3a.micro` candidate below.
 
-### Current x86_64 calculator record — pending
+### Current x86_64 cost record — provisional pass
 
-The owner approved `t3a.micro` on 2026-09-29 to keep x86_64 while restoring cost headroom. Before any apply, record a fresh public AWS Pricing Calculator normal and plausible-high estimate for this exact instance, then prove the 1 GiB host can complete the approved staging health, catalog, backup/restore, and memory/load checks without swap pressure or OOM termination.
+The owner approved `t3a.micro` on 2026-09-29 to keep x86_64 while restoring cost headroom. AWS's current regional Price List identifies the Linux shared-tenancy SKU `XJCZNGBHQ4URRV67` at **USD 0.0118/hour**, or **USD 8.61/month** at 730 hours. This is the source of truth for the compute line while the public calculator UI is unavailable from this workstation.
+
+| Service | Normal month | Plausible-high month | Basis |
+|---|---:|---:|---|
+| Linux `t3a.micro` | USD 8.61 | USD 8.61 | Current `ap-southeast-1` AWS Price List, USD 0.0118/hour × 730 hours. |
+| Encrypted gp3 EBS | USD 1.92 | USD 2.88 | 20 GiB / 30 GiB, no provisioned IOPS or throughput. |
+| Daily snapshot allowance | USD 1.75 | USD 1.75 | 30-day allowance with 1 GiB changed per day. |
+| ECR private images | USD 0.10 | USD 0.40 | 1 GiB / 4 GiB retained. |
+| S3 state and backup inputs | USD 0.05 | USD 0.38 | 2 GiB / 15 GiB with lifecycle controls. |
+| CloudWatch Logs | USD 0.38 | USD 2.28 | 0.5 GiB / 3 GiB ingest, 30-day retention. |
+| Internet egress / SSM / Budget | USD 0.00 | USD 0.00 | 20 GiB / 80 GiB remains within the shared 100 GiB AWS data-transfer allowance; standard Parameter Store and notification-only Budget. |
+| **Total before tax and external AI** | **USD 12.81** | **USD 16.30** | **Both remain below the approved USD 20 / USD 25 limits.** |
+
+This is a **provisional cost-gate pass**, not permission to apply. Before any apply, save the matching AWS Pricing Calculator estimate in the owner account and restore AWS CLI authentication to run the read-only `terraform plan`. Staging must then prove that the 1 GiB host completes health, catalog, backup/restore, and memory/load checks without swap pressure or OOM termination.
 
 ### Execution tracker — 2026-09-29
 
@@ -227,8 +240,8 @@ The owner approved `t3a.micro` on 2026-09-29 to keep x86_64 while restoring cost
 | Native x86_64 workflow | Passed | GitHub Actions run `36549156799` built the x86_64 image and passed health/catalog smoke after the readiness repair. Instance memory remains a separate staging gate. |
 | Existing Vercel release verification | Waiting for human approval | The workflow now reads the two existing GitHub **Environment variables**, not secrets. Run `36551268257` is correctly paused at the protected Environment. |
 | GitHub `Production` Environment | Configured | Required reviewer `mindu2kk`, `main`-only deployments, and no administrator bypass are enabled. The two approved URL variables remain in that Environment. |
-| AWS cost gate | Pending `t3a.micro` estimate | The `t3a.small` result remains rejected; the owner authorized a new x86_64 micro estimate. |
-| AWS staging | Blocked by current cost and memory gates | No plan/apply, account configuration, or billable staging resource may proceed until the new estimate and 1 GiB memory/load gate pass. |
+| AWS cost gate | Provisionally passed | Working total is USD 12.81 normal and USD 16.30 high before tax/external AI. Final calculator capture in the owner account remains required. |
+| AWS staging | Blocked by account auth and memory gate | AWS CLI session expired before read-only plan; after reauthentication, run plan and then use a short-lived staging host to prove the 1 GiB memory/load gate. |
 
 ## Sources used for the estimate gate
 
