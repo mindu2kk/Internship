@@ -254,6 +254,7 @@ Both working estimates are within the owner-approved USD 23 normal / USD 28 plau
 | Gate | Status | Evidence / next action |
 |---|---|---|
 | Terraform and bootstrap static validation | Passed locally | Both configurations validate with remote backends disabled; no plan or apply against an AWS account. |
+| MFA-gated Terraform operator | Partially complete | `aura-terraform-operator` can assume only `aura-phase1-provisioner`; the role trust requires MFA and has no access key or console password. Owner must complete console login and MFA enrollment before it can be used. |
 | Native x86_64 workflow | Passed | GitHub Actions run `36549156799` built the x86_64 image and passed health/catalog smoke after the readiness repair. Instance memory remains a separate staging gate. |
 | Existing Vercel release verification | Passed | The workflow reads the two existing GitHub **Environment variables**, not secrets. Production health run `36562367656` passed after the required Environment approval. |
 | GitHub `Production` Environment | Configured | Required reviewer `mindu2kk`, `main`-only deployments, and no administrator bypass are enabled. The two approved URL variables remain in that Environment. |
