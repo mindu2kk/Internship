@@ -35,7 +35,7 @@ data "aws_iam_policy_document" "origin_runtime" {
     ]
     resources = [
       aws_ecr_repository.app.arn,
-      aws_ecr_repository.frontend.arn,
+      aws_ecr_repository.proxy.arn,
     ]
   }
 
@@ -135,7 +135,7 @@ data "aws_iam_policy_document" "github_deployer" {
     ]
     resources = [
       aws_ecr_repository.app.arn,
-      aws_ecr_repository.frontend.arn,
+      aws_ecr_repository.proxy.arn,
     ]
   }
 
@@ -150,7 +150,7 @@ data "aws_iam_policy_document" "github_deployer" {
     actions = ["ssm:PutParameter"]
     resources = [
       aws_ssm_parameter.backend_release.arn,
-      aws_ssm_parameter.frontend_release.arn,
+      aws_ssm_parameter.proxy_release.arn,
     ]
   }
 

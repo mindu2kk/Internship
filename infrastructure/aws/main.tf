@@ -12,7 +12,7 @@ locals {
     "${local.parameter_prefix}/cloudflare_tunnel_token",
   )
   release_parameter_name           = "${local.parameter_prefix}/release_backend_image"
-  frontend_release_parameter_name  = "${local.parameter_prefix}/release_frontend_image"
+  proxy_release_parameter_name     = "${local.parameter_prefix}/release_proxy_image"
   frontend_url_parameter_name      = "${local.parameter_prefix}/frontend_url"
   cloudflared_image_parameter_name = "${local.parameter_prefix}/cloudflared_image"
   log_group_name                   = "/${var.project}/${var.environment}/app"
@@ -125,8 +125,8 @@ resource "aws_ecr_repository" "app" {
   }
 }
 
-resource "aws_ecr_repository" "frontend" {
-  name                 = "${local.name_prefix}-frontend"
+resource "aws_ecr_repository" "proxy" {
+  name                 = "${local.name_prefix}-proxy"
   image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
@@ -151,12 +151,12 @@ resource "aws_ecr_lifecycle_policy" "app" {
   })
 }
 
-resource "aws_ecr_lifecycle_policy" "frontend" {
-  repository = aws_ecr_repository.frontend.name
+resource "aws_ecr_lifecycle_policy" "proxy" {
+  repository = aws_ecr_repository.proxy.name
   policy = jsonencode({
     rules = [{
       rulePriority = 1
-      description  = "Keep only the newest ten immutable frontend proxy images"
+      description  = "Keep only the newest ten immutable API proxy images"
       selection = {
         tagStatus     = "tagged"
         tagPrefixList = ["sha-"]
@@ -234,8 +234,8 @@ resource "aws_ssm_parameter" "backend_release" {
   }
 }
 
-resource "aws_ssm_parameter" "frontend_release" {
-  name  = local.frontend_release_parameter_name
+resource "aws_ssm_parameter" "proxy_release" {
+  name  = local.proxy_release_parameter_name
   type  = "String"
   value = "pending"
 
@@ -297,7 +297,7 @@ resource "aws_instance" "origin" {
     account_id                       = data.aws_caller_identity.current.account_id
     backup_bucket                    = aws_s3_bucket.backup.bucket
     backend_release_parameter_name   = aws_ssm_parameter.backend_release.name
-    frontend_release_parameter_name  = aws_ssm_parameter.frontend_release.name
+    proxy_release_parameter_name     = aws_ssm_parameter.proxy_release.name
     frontend_url_parameter_name      = aws_ssm_parameter.frontend_url.name
     cloudflared_image_parameter_name = aws_ssm_parameter.cloudflared_image.name
     cloudflare_tunnel_parameter_name = local.cloudflare_tunnel_parameter_name

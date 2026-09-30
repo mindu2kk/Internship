@@ -23,16 +23,16 @@ Push a commit to `main`. A successful `CI` workflow automatically starts **Verif
 
 For a controlled retry, run **Verify Vercel production** manually, type `VERIFY`, and either rely on the Environment variables or enter both HTTPS URLs as workflow inputs. This is a health check only; it does not deploy application code.
 
-## 3. Configure AWS only after the Phase 1 gates pass
+## 3. Configure AWS staging after the Phase 1 gates pass
 
-Do not add these values or run the AWS release workflow until the cost gate, x86_64 image smoke test, and staging tunnel checks have passed:
+The cost gate and x86_64 smoke gate are complete. Add these values first to the protected `staging` Environment only when preparing an explicitly approved staging run:
 
 - `AWS_REGION`
 - `AWS_DEPLOY_ROLE_ARN`
 - `ECR_BACKEND_REPOSITORY`
-- `ECR_FRONTEND_REPOSITORY`
+- `ECR_PROXY_REPOSITORY`
 - `SSM_BACKEND_RELEASE_PARAMETER`
-- `SSM_FRONTEND_RELEASE_PARAMETER`
+- `SSM_PROXY_RELEASE_PARAMETER`
 - `PHASE_1_COST_GATE=approved`
 
-The release workflow rejects a missing value and cannot run production without the GitHub Environment approval.
+The release workflow rejects a missing value. Copy reviewed values to the protected `production` Environment only after staging passes the tunnel, health, backup/restore, rollback, and memory/load gates. Production still requires human approval.

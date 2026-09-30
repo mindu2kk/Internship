@@ -24,8 +24,8 @@ services:
       retries: 3
       start_period: 60s
 
-  frontend:
-    image: ${AURA_FRONTEND_IMAGE:?Set an immutable frontend proxy image digest}
+  api-proxy:
+    image: ${AURA_PROXY_IMAGE:?Set an immutable API proxy image digest}
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
@@ -46,7 +46,7 @@ services:
     restart: unless-stopped
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?Set Cloudflare Tunnel token}
     depends_on:
-      frontend:
+      api-proxy:
         condition: service_started
     logging:
       driver: awslogs

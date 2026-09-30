@@ -6,6 +6,8 @@ on:
       - infrastructure/**
       - SourceCode/deploy/aws/**
       - SourceCode/Dockerfile.backend
+      - SourceCode/Dockerfile.proxy
+      - SourceCode/deploy/nginx/api.conf
       - SourceCode/requirements.txt
       - .github/workflows/aws-validate.yml
   push:
@@ -14,6 +16,8 @@ on:
       - infrastructure/**
       - SourceCode/deploy/aws/**
       - SourceCode/Dockerfile.backend
+      - SourceCode/Dockerfile.proxy
+      - SourceCode/deploy/nginx/api.conf
       - SourceCode/requirements.txt
       - .github/workflows/aws-validate.yml
   workflow_dispatch:
@@ -53,6 +57,28 @@ jobs:
             echo 'Linux bootstrap files must use LF line endings.' >&2
             exit 1
           fi
+      - name: Validate API proxy image and AWS Compose rendering
+        run: |
+          docker build --file SourceCode/Dockerfile.proxy --tag aura-api-proxy:phase1 SourceCode
+          docker run --detach --name aura-api-proxy-smoke -p 18081:8080 aura-api-proxy:phase1
+          for attempt in $(seq 1 10); do
+            if curl --fail --silent --show-error http://127.0.0.1:18081/healthz; then
+              break
+            fi
+            if [ "$attempt" -eq 10 ]; then
+              docker logs aura-api-proxy-smoke
+              exit 1
+            fi
+            sleep 1
+          done
+          docker rm -f aura-api-proxy-smoke
+          AWS_REGION=ap-southeast-1 \
+          AURA_LOG_GROUP=/aura/ci/app \
+          AURA_BACKEND_IMAGE=example.invalid/aura@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+          AURA_PROXY_IMAGE=aura-api-proxy:phase1 \
+          CLOUDFLARED_IMAGE=cloudflare/cloudflared@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+          CLOUDFLARE_TUNNEL_TOKEN=ci-placeholder \
+          docker compose -f SourceCode/deploy/aws/docker-compose.aws.yml config >/dev/null
 
   x86_64-backend-smoke:
     name: x86_64 backend build and smoke test

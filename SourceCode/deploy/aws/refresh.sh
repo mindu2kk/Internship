@@ -31,23 +31,23 @@ get_parameter() {
 }
 
 backend_image="$(get_parameter "$BACKEND_RELEASE_PARAMETER")"
-frontend_image="$(get_parameter "$FRONTEND_RELEASE_PARAMETER")"
+proxy_image="$(get_parameter "$PROXY_RELEASE_PARAMETER")"
 tunnel_token="$(get_parameter "$CLOUDFLARE_TUNNEL_PARAMETER")"
 frontend_url="$(get_parameter "$FRONTEND_URL_PARAMETER")"
 cloudflared_image="$(get_parameter "$CLOUDFLARED_IMAGE_PARAMETER")"
 
-if [[ "$backend_image" == "pending" || "$frontend_image" == "pending" || "$cloudflared_image" == "pending" ]]; then
+if [[ "$backend_image" == "pending" || "$proxy_image" == "pending" || "$cloudflared_image" == "pending" ]]; then
   echo "Release image parameters are not set to reviewed immutable references." >&2
   exit 1
 fi
 
-if [[ "$backend_image" != *@sha256:* || "$frontend_image" != *@sha256:* || "$cloudflared_image" != *@sha256:* ]]; then
+if [[ "$backend_image" != *@sha256:* || "$proxy_image" != *@sha256:* || "$cloudflared_image" != *@sha256:* ]]; then
   echo "All release images must be immutable digest references." >&2
   exit 1
 fi
 
 backend_path="${backend_image#*/}"
-frontend_path="${frontend_image#*/}"
+proxy_path="${proxy_image#*/}"
 ecr_registry="${AWS_ACCOUNT_ID}.dkr-ecr.${AWS_REGION}.on.aws"
 
 AWS_USE_DUALSTACK_ENDPOINT=true aws ecr get-login-password --region "$AWS_REGION" \
@@ -59,7 +59,7 @@ cat > "$AURA_RUNTIME_ENV" <<EOF
 AWS_REGION=$AWS_REGION
 AURA_LOG_GROUP=$AURA_LOG_GROUP
 AURA_BACKEND_IMAGE=$ecr_registry/$backend_path
-AURA_FRONTEND_IMAGE=$ecr_registry/$frontend_path
+AURA_PROXY_IMAGE=$ecr_registry/$proxy_path
 CLOUDFLARED_IMAGE=$cloudflared_image
 CLOUDFLARE_TUNNEL_TOKEN=$tunnel_token
 FRONTEND_URL=$frontend_url

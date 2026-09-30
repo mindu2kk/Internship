@@ -31,9 +31,9 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
       ECR_BACKEND_REPOSITORY: ${{ vars.ECR_BACKEND_REPOSITORY }}
-      ECR_FRONTEND_REPOSITORY: ${{ vars.ECR_FRONTEND_REPOSITORY }}
+      ECR_PROXY_REPOSITORY: ${{ vars.ECR_PROXY_REPOSITORY }}
       SSM_BACKEND_RELEASE_PARAMETER: ${{ vars.SSM_BACKEND_RELEASE_PARAMETER }}
-      SSM_FRONTEND_RELEASE_PARAMETER: ${{ vars.SSM_FRONTEND_RELEASE_PARAMETER }}
+      SSM_PROXY_RELEASE_PARAMETER: ${{ vars.SSM_PROXY_RELEASE_PARAMETER }}
       PROJECT: aura
     steps:
       - name: Enforce release gates before cloud actions
@@ -42,9 +42,9 @@ jobs:
           test "${{ vars.PHASE_1_COST_GATE }}" = "approved"
           test -n "$AWS_REGION"
           test -n "$ECR_BACKEND_REPOSITORY"
-          test -n "$ECR_FRONTEND_REPOSITORY"
+          test -n "$ECR_PROXY_REPOSITORY"
           test -n "$SSM_BACKEND_RELEASE_PARAMETER"
-          test -n "$SSM_FRONTEND_RELEASE_PARAMETER"
+          test -n "$SSM_PROXY_RELEASE_PARAMETER"
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -62,23 +62,23 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPOSITORY }}:sha-${{ github.sha }}
-      - name: Build and publish immutable x86_64 Nginx proxy image
-        id: frontend
+      - name: Build and publish immutable x86_64 API proxy image
+        id: proxy
         uses: docker/build-push-action@v6
         with:
           context: ./SourceCode
-          file: ./SourceCode/Dockerfile.frontend
+          file: ./SourceCode/Dockerfile.proxy
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:sha-${{ github.sha }}
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_PROXY_REPOSITORY }}:sha-${{ github.sha }}
       - name: Point SSM release parameters to exact image digests
         run: |
           aws ssm put-parameter --overwrite --type String \
             --name "$SSM_BACKEND_RELEASE_PARAMETER" \
             --value "${{ steps.ecr.outputs.registry }}/$ECR_BACKEND_REPOSITORY@${{ steps.backend.outputs.digest }}"
           aws ssm put-parameter --overwrite --type String \
-            --name "$SSM_FRONTEND_RELEASE_PARAMETER" \
-            --value "${{ steps.ecr.outputs.registry }}/$ECR_FRONTEND_REPOSITORY@${{ steps.frontend.outputs.digest }}"
+            --name "$SSM_PROXY_RELEASE_PARAMETER" \
+            --value "${{ steps.ecr.outputs.registry }}/$ECR_PROXY_REPOSITORY@${{ steps.proxy.outputs.digest }}"
       - name: Refresh only the tagged target instance through Session Manager
         id: refresh
         run: |

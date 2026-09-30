@@ -12,7 +12,7 @@ terraform -chdir=infrastructure/aws validate
 terraform -chdir=infrastructure/aws fmt -check -recursive
 ```
 
-Do not run `apply` until all Phase 1 evidence in `../DEVOPS_PHASE_1_ARCHITECTURE_AND_COST.md` is complete. In particular, a complete calculator estimate for the selected x86_64 `t3a.small` must be within USD 23 normal and USD 28 plausible-high AWS infrastructure use, native x86_64 CI must pass, and a short-lived staging tunnel plus memory/load test must prove the 2 GiB instance is adequate.
+Phase 1 evidence in `../DEVOPS_PHASE_1_ARCHITECTURE_AND_COST.md` is complete. This does **not** authorize an apply. Run a fresh reviewed plan and obtain explicit approval before a short-lived staging apply. Staging must then prove the tunnel, recovery path, and 2 GiB memory/load gate before any production promotion.
 
 ## State bootstrap and environments
 
@@ -36,15 +36,15 @@ Terraform creates no secret values, because a `SecureString` managed by Terrafor
 - `/<project>/<environment>/cloudflare_tunnel_token`
 - external AI keys required by the app, for example `openai_api_key`, `google_api_key`, `tavily_api_key`, and `llama_cloud_api_key`
 
-Terraform creates non-secret release/configuration placeholders for backend image, frontend image, frontend URL, and cloudflared image. Before the first refresh, set `frontend_url` to the real private domain and `cloudflared_image` to a reviewed x86_64 image **digest**, not a tag. `aura-refresh` rejects `pending` or tag-only image values.
+Terraform creates non-secret release/configuration placeholders for the backend image, API-proxy image, Vercel frontend URL, and cloudflared image. Before the first refresh, set `frontend_url` to the owner-approved Vercel/custom URL and `cloudflared_image` to a reviewed x86_64 image **digest**, not a tag. `aura-refresh` rejects `pending` or tag-only image values.
 
-The Cloudflare named tunnel and its public hostname are owner-managed because the domain remains private. Its remote ingress service must target `http://frontend:8080`; the tunnel token is the only Cloudflare value installed on EC2.
+The Cloudflare named tunnel and its public hostname are owner-managed because the domain remains private. Its remote ingress service must target `http://api-proxy:8080`; the tunnel token is the only Cloudflare value installed on EC2. The React frontend remains on Vercel and is not deployed to this host.
 
-The release workflow writes only immutable backend/frontend ECR image references to the two non-secret SSM parameters created by Terraform. It runs only by manual dispatch, and its production job uses the GitHub `production` environment; configure that environment to require human approval before enabling the workflow.
+The release workflow writes only immutable backend/API-proxy ECR image references to the two non-secret SSM parameters created by Terraform. It runs only by manual dispatch, and its production job uses the GitHub `production` environment with required human approval.
 
 ## Required operator checks
 
 1. Set `budget_alert_email` in a secure tfvars file. The plan intentionally fails without it.
-2. Create the owner-approved staging and production GitHub environments. Configure `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, `ECR_BACKEND_REPOSITORY`, `ECR_FRONTEND_REPOSITORY`, `SSM_BACKEND_RELEASE_PARAMETER`, `SSM_FRONTEND_RELEASE_PARAMETER`, and `PHASE_1_COST_GATE=approved` only after the cost gate passes. Add production reviewer protection.
+2. Create the owner-approved staging and production GitHub environments. Configure `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, `ECR_BACKEND_REPOSITORY`, `ECR_PROXY_REPOSITORY`, `SSM_BACKEND_RELEASE_PARAMETER`, `SSM_PROXY_RELEASE_PARAMETER`, and `PHASE_1_COST_GATE=approved` only after the cost gate passes. Keep production reviewer protection enabled.
 3. Run `terraform plan`; inspect only. A subsequent apply remains a separate cost-producing decision.
 4. When an instance exists, verify SSM, ECR dual-stack pull, S3 backup/restore, CloudWatch delivery, and the Cloudflare tunnel before DNS cutover.

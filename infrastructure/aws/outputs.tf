@@ -14,16 +14,16 @@ output "backend_repository" {
   value = aws_ecr_repository.app.repository_url
 }
 
-output "frontend_repository" {
-  value = aws_ecr_repository.frontend.repository_url
+output "proxy_repository" {
+  value = aws_ecr_repository.proxy.repository_url
 }
 
 output "backend_release_parameter" {
   value = aws_ssm_parameter.backend_release.name
 }
 
-output "frontend_release_parameter" {
-  value = aws_ssm_parameter.frontend_release.name
+output "proxy_release_parameter" {
+  value = aws_ssm_parameter.proxy_release.name
 }
 
 output "frontend_url_parameter" {
