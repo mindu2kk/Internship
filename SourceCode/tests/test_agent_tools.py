@@ -76,9 +76,9 @@ def test_get_product_field_returns_known_battery_fact() -> None:
 
 def test_get_product_field_returns_missing_weight_without_searching() -> None:
     catalog = get_catalog()
-    field = get_product_field(catalog, "00927992", "weight_kg")
+    field = get_product_field(catalog, "00927403", "weight_kg")
 
-    assert field.code == "00927992"
+    assert field.code == "00927403"
     assert field.field == "weight_kg"
     assert field.value is None
     assert field.missing is True

@@ -1260,7 +1260,7 @@ def _comparison_products_from_explicit_or_state(
     message: str,
     agent_state: ContractAgentState,
 ) -> list[CatalogProduct]:
-    explicit_products = catalog.resolve_products(message, limit=2)
+    explicit_products = catalog.resolve_products(message, limit=8)
     if len(explicit_products) == 1:
         anchor = explicit_products[0]
         competitor = _closest_same_range_product(catalog, anchor)
@@ -1269,7 +1269,7 @@ def _comparison_products_from_explicit_or_state(
         state_products = _comparison_products_from_state(catalog, agent_state)
         return [anchor] + [product for product in state_products if product.code != anchor.code][:1]
     if len(explicit_products) >= 2:
-        return explicit_products[:2]
+        return explicit_products
     return _comparison_products_from_state(catalog, agent_state)
 
 
@@ -1362,9 +1362,22 @@ def _commit_contract_state(
     focused_product: CatalogProduct | None,
     catalog_revision: str,
 ) -> DecisionContext:
+    previous_codes = set(previous.compared_codes or previous.candidate_codes)
+    starts_new_product_topic = bool(
+        focused_product
+        and previous_codes
+        and focused_product.code not in previous_codes
+        and route.intent in {"product_selection", "product_detail", "correction"}
+    )
     transition_base = (
         DecisionContext()
-        if route.has_new_constraints and route.constraints.get("exclude_previous") is not True
+        if (
+            starts_new_product_topic
+            or (
+                route.has_new_constraints
+                and route.constraints.get("exclude_previous") is not True
+            )
+        )
         else previous
     )
     shown_refs = (
@@ -1374,57 +1387,73 @@ def _commit_contract_state(
     )
     candidate_codes = [product.code for product in shown_products] or previous.candidate_codes
     compared_codes = (
-        candidate_codes[:2]
+        candidate_codes[:8]
         if route.intent == "comparison" and len(candidate_codes) >= 2
         else []
     )
     compared_brands = (
-        list(dict.fromkeys(product.brand for product in shown_products[:2]))
+        list(dict.fromkeys(product.brand for product in shown_products))[:4]
         if compared_codes
         else []
     )
+    shown_categories = {product.category for product in shown_products}
+    resolved_category = (
+        frame.constraints.category
+        or (next(iter(shown_categories)) if len(shown_categories) == 1 else None)
+        or transition_base.category
+    )
     return DecisionContext(
-        category=frame.constraints.category or previous.category or transition_base.category,
+        category=resolved_category,
         budget_target=(
             route.constraints.get("target_price")
             if isinstance(route.constraints.get("target_price"), int)
-            else previous.budget_target
+            else transition_base.budget_target
         ),
-        budget_minimum=frame.constraints.min_price if frame.constraints.min_price is not None else previous.budget_minimum,
-        budget_maximum=frame.constraints.max_price if frame.constraints.max_price is not None else previous.budget_maximum,
-        goal=previous.goal,
-        use_case=frame.constraints.use_case or previous.use_case,
+        budget_minimum=frame.constraints.min_price if frame.constraints.min_price is not None else transition_base.budget_minimum,
+        budget_maximum=frame.constraints.max_price if frame.constraints.max_price is not None else transition_base.budget_maximum,
+        goal=transition_base.goal,
+        use_case=frame.constraints.use_case or transition_base.use_case,
         active_product_code=(
-            focused_product.code
+            None
+            if route.intent == "comparison"
+            else focused_product.code
             if focused_product
             else shown_products[0].code
             if shown_products
-            else previous.active_product_code
+            else transition_base.active_product_code
         ),
-        focused_product_code=focused_product.code if focused_product else previous.focused_product_code,
-        focused_product_name=focused_product.name if focused_product else previous.focused_product_name,
+        focused_product_code=focused_product.code if focused_product else transition_base.focused_product_code,
+        focused_product_name=focused_product.name if focused_product else transition_base.focused_product_name,
         last_user_selected_product_code=(
             focused_product.code
             if focused_product and route.intent in {"product_selection", "product_detail"}
-            else previous.last_user_selected_product_code
+            else transition_base.last_user_selected_product_code
         ),
         compared_codes=compared_codes,
         compared_brands=compared_brands,
         candidate_codes=candidate_codes[:12],
         last_shown_candidates=shown_refs,
-        last_category=frame.constraints.category or previous.last_category,
+        last_category=resolved_category or transition_base.last_category,
         last_sales_intent=route.intent,
-        preferences=previous.preferences,
-        rejected_codes=previous.rejected_codes,
+        preferences=transition_base.preferences,
+        rejected_codes=transition_base.rejected_codes,
         last_intent=route.intent,
-        last_recommendation_code=focused_product.code if focused_product else (candidate_codes[0] if candidate_codes else previous.last_recommendation_code),
-        topic_id=previous.topic_id or hashlib.sha1(f"{frame.constraints.category}:{utc_now_iso()}".encode()).hexdigest()[:12],
+        last_recommendation_code=(
+            None
+            if route.intent == "comparison"
+            else focused_product.code
+            if focused_product
+            else candidate_codes[0]
+            if candidate_codes
+            else transition_base.last_recommendation_code
+        ),
+        topic_id=transition_base.topic_id or hashlib.sha1(f"{resolved_category}:{utc_now_iso()}".encode()).hexdigest()[:12],
         updated_at=utc_now_iso(),
         state_version=max(1, previous.state_version + 1),
         catalog_revision=catalog_revision,
-        context_compacted_at=previous.context_compacted_at,
-        unresolved_questions=previous.unresolved_questions,
-        confirmed_constraints=previous.confirmed_constraints,
+        context_compacted_at=transition_base.context_compacted_at,
+        unresolved_questions=transition_base.unresolved_questions,
+        confirmed_constraints=transition_base.confirmed_constraints,
         last_query_frame=_query_frame_public_dict(frame),
     )
 

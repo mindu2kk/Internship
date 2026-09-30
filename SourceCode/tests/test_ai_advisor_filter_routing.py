@@ -86,11 +86,11 @@ def test_dell_under_30m_with_dedicated_gpu_filters_exactly() -> None:
 
 
 def test_focused_weight_question_reports_missing_catalog_field_without_searching_random_products() -> None:
-    state = _state_for_focus("00927992")
+    state = _state_for_focus("00927403")
 
     payload = _ask("may Dell ban dang noi nang bao kg", state)
     assert payload["products"]
-    assert [product["code"] for product in payload["products"]] == ["00927992"]
+    assert [product["code"] for product in payload["products"]] == ["00927403"]
     assert "chưa có dữ liệu trọng lượng" in payload["text"].lower()
 
 
