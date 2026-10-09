@@ -78,8 +78,6 @@ jobs:
           AURA_LOG_GROUP=/aura/ci/app \
           AURA_BACKEND_IMAGE=example.invalid/aura@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
           AURA_PROXY_IMAGE=aura-api-proxy:phase1 \
-          CLOUDFLARED_IMAGE=cloudflare/cloudflared@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
-          CLOUDFLARE_TUNNEL_TOKEN=ci-placeholder \
           docker compose -f SourceCode/deploy/aws/docker-compose.aws.yml config >/dev/null
 
   x86_64-backend-smoke:

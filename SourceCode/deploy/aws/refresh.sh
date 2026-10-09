@@ -33,16 +33,14 @@ get_parameter() {
 
 backend_image="$(get_parameter "$BACKEND_RELEASE_PARAMETER")"
 proxy_image="$(get_parameter "$PROXY_RELEASE_PARAMETER")"
-tunnel_token="$(get_parameter "$CLOUDFLARE_TUNNEL_PARAMETER")"
 frontend_url="$(get_parameter "$FRONTEND_URL_PARAMETER")"
-cloudflared_image="$(get_parameter "$CLOUDFLARED_IMAGE_PARAMETER")"
 
-if [[ "$backend_image" == "pending" || "$proxy_image" == "pending" || "$cloudflared_image" == "pending" ]]; then
+if [[ "$backend_image" == "pending" || "$proxy_image" == "pending" ]]; then
   echo "Release image parameters are not set to reviewed immutable references." >&2
   exit 1
 fi
 
-if [[ "$backend_image" != *@sha256:* || "$proxy_image" != *@sha256:* || "$cloudflared_image" != *@sha256:* ]]; then
+if [[ "$backend_image" != *@sha256:* || "$proxy_image" != *@sha256:* ]]; then
   echo "All release images must be immutable digest references." >&2
   exit 1
 fi
@@ -62,8 +60,6 @@ AWS_REGION=$AWS_REGION
 AURA_LOG_GROUP=$AURA_LOG_GROUP
 AURA_BACKEND_IMAGE=$ecr_registry/$backend_path
 AURA_PROXY_IMAGE=$ecr_registry/$proxy_path
-CLOUDFLARED_IMAGE=$cloudflared_image
-CLOUDFLARE_TUNNEL_TOKEN=$tunnel_token
 FRONTEND_URL=$frontend_url
 EOF
 while IFS='=' read -r environment_name parameter_name; do
@@ -76,7 +72,7 @@ release_id="release-$(date -u +%Y%m%dT%H%M%SZ)-${release_digest:0:12}.env"
 cp -p "$AURA_RUNTIME_ENV" "${AURA_RELEASES}/${release_id}"
 find "$AURA_RELEASES" -maxdepth 1 -type f -name 'release-*.env' -printf '%T@ %p\n' \
   | sort -nr | tail -n +11 | cut -d' ' -f2- | xargs -r rm -f
-unset tunnel_token frontend_url cloudflared_image
+unset frontend_url
 
 export AURA_RUNTIME_ENV
 docker compose --project-name aura --env-file "$AURA_RUNTIME_ENV" -f "$AURA_COMPOSE" pull

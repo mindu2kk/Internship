@@ -75,8 +75,6 @@ BACKUP_BUCKET=${backup_bucket}
 BACKEND_RELEASE_PARAMETER=${backend_release_parameter_name}
 PROXY_RELEASE_PARAMETER=${proxy_release_parameter_name}
 FRONTEND_URL_PARAMETER=${frontend_url_parameter_name}
-CLOUDFLARED_IMAGE_PARAMETER=${cloudflared_image_parameter_name}
-CLOUDFLARE_TUNNEL_PARAMETER=${cloudflare_tunnel_parameter_name}
 AURA_LOG_GROUP=${log_group_name}
 EOF
 chmod 0600 /etc/aura/deploy.env
@@ -119,5 +117,5 @@ EOF
 systemctl daemon-reload
 systemctl enable --now aura-backup.timer
 
-# The image and tunnel token are intentionally unavailable until their SSM
-# parameters are populated. A release workflow invokes aura-refresh via SSM.
+# Release images are intentionally unavailable until their SSM parameters are
+# populated. A release workflow invokes aura-refresh via SSM.

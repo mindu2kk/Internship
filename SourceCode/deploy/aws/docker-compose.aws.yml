@@ -40,22 +40,3 @@ services:
         awslogs-stream: nginx
         awslogs-create-group: "false"
         awslogs-endpoint: https://logs.${AWS_REGION}.api.aws
-
-  cloudflared:
-    image: ${CLOUDFLARED_IMAGE:?Set a reviewed cloudflared image digest}
-    restart: unless-stopped
-    command: tunnel --no-autoupdate --edge-ip-version 6 --protocol http2 run --token ${CLOUDFLARE_TUNNEL_TOKEN:?Set Cloudflare Tunnel token}
-    depends_on:
-      api-proxy:
-        condition: service_started
-    network_mode: host
-    extra_hosts:
-      - "api-proxy:127.0.0.1"
-    logging:
-      driver: awslogs
-      options:
-        awslogs-region: ${AWS_REGION:?Set AWS_REGION}
-        awslogs-group: ${AURA_LOG_GROUP:?Set AURA_LOG_GROUP}
-        awslogs-stream: cloudflared
-        awslogs-create-group: "false"
-        awslogs-endpoint: https://logs.${AWS_REGION}.api.aws

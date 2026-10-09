@@ -5,18 +5,13 @@ data "aws_ssm_parameter" "al2023_x86_64" {
 }
 
 locals {
-  name_prefix      = "${var.project}-${var.environment}"
-  parameter_prefix = "/${var.project}/${var.environment}"
-  cloudflare_tunnel_parameter_name = coalesce(
-    var.cloudflare_tunnel_parameter_name,
-    "${local.parameter_prefix}/cloudflare_tunnel_token",
-  )
-  release_parameter_name           = "${local.parameter_prefix}/release_backend_image"
-  proxy_release_parameter_name     = "${local.parameter_prefix}/release_proxy_image"
-  frontend_url_parameter_name      = "${local.parameter_prefix}/frontend_url"
-  cloudflared_image_parameter_name = "${local.parameter_prefix}/cloudflared_image"
-  log_group_name                   = "/${var.project}/${var.environment}/app"
-  backup_bucket_name               = "${var.project}-${data.aws_caller_identity.current.account_id}-${var.environment}-backup"
+  name_prefix                  = "${var.project}-${var.environment}"
+  parameter_prefix             = "/${var.project}/${var.environment}"
+  release_parameter_name       = "${local.parameter_prefix}/release_backend_image"
+  proxy_release_parameter_name = "${local.parameter_prefix}/release_proxy_image"
+  frontend_url_parameter_name  = "${local.parameter_prefix}/frontend_url"
+  log_group_name               = "/${var.project}/${var.environment}/app"
+  backup_bucket_name           = "${var.project}-${data.aws_caller_identity.current.account_id}-${var.environment}-backup"
   github_oidc_provider_arn = coalesce(
     var.github_oidc_provider_arn,
     try(aws_iam_openid_connect_provider.github[0].arn, null),
@@ -96,29 +91,13 @@ resource "aws_route_table_association" "origin" {
 
 resource "aws_security_group" "origin" {
   name        = "${local.name_prefix}-origin"
-  description = "No ingress. Origin only makes outbound IPv6 tunnel and AWS service connections."
+  description = "Private application origin. Ingress is restricted to the application load balancer."
   vpc_id      = aws_vpc.this.id
 
   egress {
-    description      = "HTTPS to Cloudflare and AWS dual-stack services"
+    description      = "HTTPS to AWS dual-stack services"
     from_port        = 443
     to_port          = 443
-    protocol         = "tcp"
-    ipv6_cidr_blocks = ["::/0"]
-  }
-
-  egress {
-    description      = "Cloudflare Tunnel QUIC"
-    from_port        = 7844
-    to_port          = 7844
-    protocol         = "udp"
-    ipv6_cidr_blocks = ["::/0"]
-  }
-
-  egress {
-    description      = "Cloudflare Tunnel TCP fallback"
-    from_port        = 7844
-    to_port          = 7844
     protocol         = "tcp"
     ipv6_cidr_blocks = ["::/0"]
   }
@@ -277,16 +256,6 @@ resource "aws_ssm_parameter" "frontend_url" {
   }
 }
 
-resource "aws_ssm_parameter" "cloudflared_image" {
-  name  = local.cloudflared_image_parameter_name
-  type  = "String"
-  value = "pending"
-
-  lifecycle {
-    ignore_changes = [value]
-  }
-}
-
 resource "aws_instance" "origin" {
   ami                         = data.aws_ssm_parameter.al2023_x86_64.value
   instance_type               = var.instance_type
@@ -320,19 +289,17 @@ resource "aws_instance" "origin" {
   }
 
   user_data = templatefile("${path.module}/templates/user_data.sh.tftpl", {
-    aws_region                       = var.aws_region
-    project                          = var.project
-    environment                      = var.environment
-    account_id                       = data.aws_caller_identity.current.account_id
-    backup_bucket                    = aws_s3_bucket.backup.bucket
-    backend_release_parameter_name   = aws_ssm_parameter.backend_release.name
-    proxy_release_parameter_name     = aws_ssm_parameter.proxy_release.name
-    frontend_url_parameter_name      = aws_ssm_parameter.frontend_url.name
-    cloudflared_image_parameter_name = aws_ssm_parameter.cloudflared_image.name
-    cloudflare_tunnel_parameter_name = local.cloudflare_tunnel_parameter_name
-    log_group_name                   = aws_cloudwatch_log_group.app.name
-    bootstrap_assets_sha256          = local.bootstrap_assets_sha256
-    runtime_secret_parameters        = join("\n", [for environment_name, parameter_path in local.runtime_secret_parameter_paths : "${environment_name}=${parameter_path}"])
+    aws_region                     = var.aws_region
+    project                        = var.project
+    environment                    = var.environment
+    account_id                     = data.aws_caller_identity.current.account_id
+    backup_bucket                  = aws_s3_bucket.backup.bucket
+    backend_release_parameter_name = aws_ssm_parameter.backend_release.name
+    proxy_release_parameter_name   = aws_ssm_parameter.proxy_release.name
+    frontend_url_parameter_name    = aws_ssm_parameter.frontend_url.name
+    log_group_name                 = aws_cloudwatch_log_group.app.name
+    bootstrap_assets_sha256        = local.bootstrap_assets_sha256
+    runtime_secret_parameters      = join("\n", [for environment_name, parameter_path in local.runtime_secret_parameter_paths : "${environment_name}=${parameter_path}"])
   })
 
   lifecycle {

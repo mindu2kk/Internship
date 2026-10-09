@@ -71,10 +71,20 @@ variable "backup_retention_days" {
   default     = 30
 }
 
-variable "cloudflare_tunnel_parameter_name" {
+variable "api_domain_name" {
   type        = string
-  description = "Out-of-state SSM SecureString holding the Cloudflare named-tunnel token."
-  default     = null
+  description = "Public API hostname served by the AWS Application Load Balancer, for example api-staging.example.com."
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9.-]*[a-z0-9]$", var.api_domain_name))
+    error_message = "api_domain_name must be a lowercase DNS hostname without a protocol or path."
+  }
+}
+
+variable "enable_https_listener" {
+  type        = bool
+  description = "Creates the HTTPS listener only after the ACM DNS validation CNAME has been verified."
+  default     = false
 }
 
 variable "runtime_secret_parameter_names" {
