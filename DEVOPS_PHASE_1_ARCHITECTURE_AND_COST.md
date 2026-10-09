@@ -1,6 +1,6 @@
 # AURA Phase 1 — AWS Architecture and Cost Gate
 
-**Status:** **Phase 1 design and cost gate complete.** `t3a.small` is the selected x86_64 candidate. Saved AWS Pricing Calculator estimates plus a bounded operational-services allowance produce USD 22.60 normal and USD 27.66 plausible-high, within the owner-approved USD 23 / USD 28 gate. No AWS resource has been applied.
+**Status:** **Phase 1 design, cost gate, and staging infrastructure foundation complete.** `t3a.small` remains the costed x86_64 production candidate. Saved AWS Pricing Calculator estimates plus a bounded operational-services allowance produce USD 22.60 normal and USD 27.66 plausible-high, within the owner-approved USD 23 / USD 28 gate. On 2026-10-09, the AWS Free Tier account rejected `t3a.small`, so the staging foundation was applied with the approved same-memory x86_64 `t3.small` fallback. Application release and production deployment have not run.
 **Date:** 2026-09-30
 **Depends on:** `DEVOPS_PHASE_0_PRODUCTION_CONTRACT.md`
 
@@ -109,7 +109,7 @@ The public calculator captures EC2, EBS, daily snapshots, and data transfer. Sma
 | ECR + S3 + CloudWatch allowance | **USD 0.50** | Current/rollback images, compact recovery inputs, and bounded 30-day operational logs | Must be monitored; this is not a free-tier dependency. |
 | **Normal decision total** | **USD 22.60** | Calculator plus allowance | Passes the USD 23 normal gate with USD 0.40 headroom. |
 
-**Conclusion for the selected `t3a.small`:** the normal and plausible-high gates pass. Normal is USD 22.60 including allowance. Plausible high is USD 27.66 including allowance. This completes Phase 1 design/cost work but does not authorize an apply.
+**Conclusion for the selected `t3a.small`:** the normal and plausible-high gates pass. Normal is USD 22.60 including allowance. Plausible high is USD 27.66 including allowance. This completed the Phase 1 design/cost decision; the owner subsequently granted separate approval for the staging foundation apply recorded in `DEVOPS_PHASE_1_COMPLETION_REPORT.md`.
 
 ### Required estimator output
 
@@ -158,7 +158,7 @@ The owner authorized implementation of the reviewed code artifacts, while AWS cr
 | Implemented artifact | Purpose | Current evidence boundary |
 |---|---|---|
 | `infrastructure/state-bootstrap` | Encrypted, versioned S3 state bucket with S3 lockfile support | `terraform validate` passed; it has not been applied. |
-| `infrastructure/aws` | IPv6-only VPC/subnet/route, no-ingress origin security group, x86_64 `t3a.small` EC2, encrypted gp3 root/data disk, ECR, S3 backup bucket, CloudWatch log group, SSM release pointers, IAM, Budget, and GitHub OIDC roles | `terraform validate` passed with the backend disabled; staging plan is read-only and no apply has run. |
+| `infrastructure/aws` | IPv6-only VPC/subnet/route, no-ingress origin security group, x86_64 EC2, encrypted gp3 root/data disk, ECR, S3 backup bucket, CloudWatch log group, SSM release pointers, IAM, Budget, and GitHub OIDC roles | Staging foundation applied with the `t3.small` Free Tier fallback on 2026-10-09. Runtime/bootstrap checks passed and the final remote-state plan returned `No changes`; application release remains pending. |
 | `SourceCode/deploy/aws` | Immutable-digest refresh, backend-only API proxy, Cloudflare Tunnel container, 30-day log target, daily Chroma-only S3 backup timer, and no persistent chat database | Frontend remains on Vercel. Shell syntax and Compose rendering pass with inert test values; EC2/IPv6 runtime has not been tested. |
 | `.github/workflows/aws-validate.yml` | Terraform static checks plus native x86_64 backend build/health/catalog smoke gate | GitHub Actions run `36549156799` passed. |
 | `.github/workflows/aws-release.yml` | Manual release of exact backend/API-proxy x86_64 digests through OIDC, SSM, and a GitHub Environment approval gate | Defined but intentionally not run before staging exists. Production approval is already configured. |

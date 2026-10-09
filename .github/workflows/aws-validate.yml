@@ -87,7 +87,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - name: Build backend for the t3a architecture
+      - name: Build backend for the x86_64 architecture
         uses: docker/build-push-action@v6
         with:
           context: ./SourceCode
