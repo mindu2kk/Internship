@@ -26,12 +26,24 @@ snapshot_path="${AURA_RELEASES}/${release_name}"
 # shellcheck disable=SC1091
 source "$AURA_CONFIG"
 install -d -m 0700 "$AURA_RELEASES"
-current_id="release-$(date -u +%Y%m%dT%H%M%SZ)-rollback-from.env"
-cp -p "$AURA_RUNTIME_ENV" "${AURA_RELEASES}/${current_id}"
+current_fingerprint="$(sha256sum "$AURA_RUNTIME_ENV" | awk '{print substr($1, 1, 12)}')"
+current_id="release-$(date -u +%Y%m%dT%H%M%SZ)-${current_fingerprint}.env"
+current_path="${AURA_RELEASES}/${current_id}"
+cp -p "$AURA_RUNTIME_ENV" "$current_path"
 cp -p "$snapshot_path" "$AURA_RUNTIME_ENV"
 chmod 0600 "$AURA_RUNTIME_ENV"
 
-docker compose --project-name aura --env-file "$AURA_RUNTIME_ENV" -f "$AURA_COMPOSE" pull
+if docker compose --project-name aura --env-file "$AURA_RUNTIME_ENV" -f "$AURA_COMPOSE" pull \
+  && docker compose --project-name aura --env-file "$AURA_RUNTIME_ENV" -f "$AURA_COMPOSE" up -d --wait --remove-orphans \
+  && curl --fail --retry 10 --retry-connrefused http://127.0.0.1:8080/healthz; then
+  echo "Rollback completed from release snapshot: $release_name"
+  exit 0
+fi
+
+echo "Rollback health check failed; restoring the pre-rollback runtime automatically." >&2
+cp -p "$current_path" "$AURA_RUNTIME_ENV"
+chmod 0600 "$AURA_RUNTIME_ENV"
 docker compose --project-name aura --env-file "$AURA_RUNTIME_ENV" -f "$AURA_COMPOSE" up -d --wait --remove-orphans
 curl --fail --retry 10 --retry-connrefused http://127.0.0.1:8080/healthz
-echo "Rollback completed from release snapshot: $release_name"
+echo "Rollback was reverted because the selected release did not become healthy." >&2
+exit 1

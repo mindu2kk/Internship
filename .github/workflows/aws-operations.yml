@@ -40,6 +40,7 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
       PROJECT: aura
+      ROLLBACK_SNAPSHOT: ${{ inputs.rollback_snapshot }}
     steps:
       - name: Validate the requested operation
         run: |
@@ -48,8 +49,7 @@ jobs:
           case "${{ inputs.operation }}" in
             backup) ;;
             rollback)
-              snapshot='${{ inputs.rollback_snapshot }}'
-              [[ "$snapshot" =~ ^release-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}\.env$ ]]
+              [[ "$ROLLBACK_SNAPSHOT" =~ ^release-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}\.env$ ]]
               ;;
             *) exit 1 ;;
           esac
@@ -68,7 +68,7 @@ jobs:
 
           case "${{ inputs.operation }}" in
             backup) command='sudo /usr/local/bin/aura-backup' ;;
-            rollback) command="sudo /usr/local/bin/aura-rollback ${{ inputs.rollback_snapshot }}" ;;
+            rollback) command="sudo /usr/local/bin/aura-rollback $ROLLBACK_SNAPSHOT" ;;
           esac
 
           command_id="$(aws ssm send-command \

@@ -14,6 +14,10 @@ usage() {
 
 [[ $# -eq 1 ]] || usage
 [[ -r "$AURA_CONFIG" ]] || { echo "Missing required file: $AURA_CONFIG" >&2; exit 1; }
+[[ -r "$AURA_RUNTIME_ENV" && -r "$AURA_COMPOSE" ]] || {
+  echo "A deployed runtime is required before restore." >&2
+  exit 1
+}
 
 # shellcheck disable=SC1091
 source "$AURA_CONFIG"
@@ -39,14 +43,31 @@ tar -C "$restore_tmp" -xzf "$archive_path"
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 previous_path="${AURA_DATA_ROOT}/chroma.pre-restore-${timestamp}"
+had_previous=false
 if [[ -d "${AURA_DATA_ROOT}/chroma" ]]; then
+  had_previous=true
+fi
+
+# Do not replace a mounted Chroma directory while its writer is running.
+docker compose --project-name aura --env-file "$AURA_RUNTIME_ENV" -f "$AURA_COMPOSE" stop backend
+if [[ "$had_previous" == true ]]; then
   mv "${AURA_DATA_ROOT}/chroma" "$previous_path"
 fi
 mv "$restore_tmp/chroma" "${AURA_DATA_ROOT}/chroma"
 
-if [[ -r "$AURA_RUNTIME_ENV" ]]; then
-  docker compose --project-name aura --env-file "$AURA_RUNTIME_ENV" -f "$AURA_COMPOSE" up -d --wait --remove-orphans
-  curl --fail --retry 10 --retry-connrefused http://127.0.0.1:8080/healthz
+if docker compose --project-name aura --env-file "$AURA_RUNTIME_ENV" -f "$AURA_COMPOSE" up -d --wait --remove-orphans \
+  && curl --fail --retry 10 --retry-connrefused http://127.0.0.1:8080/healthz; then
+  echo "Restore completed. Previous data, if present, is retained at: $previous_path"
+  exit 0
 fi
 
-echo "Restore completed. Previous data, if present, is retained at: $previous_path"
+echo "Restore health check failed; restoring the previous Chroma data automatically." >&2
+docker compose --project-name aura --env-file "$AURA_RUNTIME_ENV" -f "$AURA_COMPOSE" stop backend || true
+rm -rf "${AURA_DATA_ROOT}/chroma"
+if [[ "$had_previous" == true ]]; then
+  mv "$previous_path" "${AURA_DATA_ROOT}/chroma"
+fi
+docker compose --project-name aura --env-file "$AURA_RUNTIME_ENV" -f "$AURA_COMPOSE" up -d --wait --remove-orphans
+curl --fail --retry 10 --retry-connrefused http://127.0.0.1:8080/healthz
+echo "Restore was reverted because the restored data did not become healthy." >&2
+exit 1
