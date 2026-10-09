@@ -28,7 +28,10 @@ services:
     image: ${AURA_PROXY_IMAGE:?Set an immutable API proxy image digest}
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8080:8080"
+      # The origin security group permits this port only from the ALB security
+      # group; binding to all host interfaces is required for target health
+      # checks and never exposes the EC2 instance directly to the Internet.
+      - "8080:8080"
     depends_on:
       backend:
         condition: service_healthy

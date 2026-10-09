@@ -90,8 +90,10 @@ resource "aws_route_table_association" "origin" {
 }
 
 resource "aws_security_group" "origin" {
-  name        = "${local.name_prefix}-origin"
-  description = "Private application origin. Ingress is restricted to the application load balancer."
+  name = "${local.name_prefix}-origin"
+  # AWS does not allow updating a security-group description. Keep this stable
+  # so an ingress-rule migration never forces replacement of the EC2 origin.
+  description = "No ingress. Origin only makes outbound IPv6 tunnel and AWS service connections."
   vpc_id      = aws_vpc.this.id
 
   egress {
@@ -264,7 +266,10 @@ resource "aws_instance" "origin" {
   ipv6_address_count          = 1
   vpc_security_group_ids      = [aws_security_group.origin.id]
   iam_instance_profile        = aws_iam_instance_profile.origin.name
-  user_data_replace_on_change = true
+  # Bootstrap assets are refreshed through SSM. Replacing this stateful origin
+  # merely because a script changes would create avoidable downtime and force a
+  # Chroma restore; immutable application releases remain handled by ECR/SSM.
+  user_data_replace_on_change = false
 
   depends_on = [
     aws_iam_role_policy.origin_runtime,
