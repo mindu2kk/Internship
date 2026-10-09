@@ -2,7 +2,8 @@
   "agent": {
     "metrics_collection_interval": 60,
     "region": "${aws_region}",
-    "run_as_user": "root"
+    "run_as_user": "root",
+    "use_dualstack_endpoint": true
   },
   "metrics": {
     "namespace": "AURA/${environment}",
