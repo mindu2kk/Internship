@@ -25,9 +25,22 @@ PY
 systemctl restart amazon-ssm-agent
 
 dnf update -y
-dnf install -y docker curl tar
+dnf install -y docker tar
 if ! docker compose version >/dev/null 2>&1; then
-  dnf install -y docker-compose-plugin
+  compose_version='v5.6.0'
+  compose_sha256='40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a'
+  compose_path='/usr/local/lib/docker/cli-plugins/docker-compose'
+  install -d -m 0755 "$(dirname "$compose_path")"
+  for attempt in {1..12}; do
+    if AWS_USE_DUALSTACK_ENDPOINT=true aws s3 cp \
+      "s3://${backup_bucket}/bootstrap/docker-compose-linux-x86_64-$compose_version" \
+      "$compose_path" --region '${aws_region}' --only-show-errors; then
+      break
+    fi
+    sleep 10
+  done
+  echo "$compose_sha256  $compose_path" | sha256sum -c -
+  chmod 0755 "$compose_path"
 fi
 systemctl enable --now docker
 

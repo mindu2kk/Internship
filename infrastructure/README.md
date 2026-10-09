@@ -12,11 +12,11 @@ terraform -chdir=infrastructure/aws validate
 terraform -chdir=infrastructure/aws fmt -check -recursive
 ```
 
-Phase 1 evidence in `../DEVOPS_PHASE_1_ARCHITECTURE_AND_COST.md` is complete. This does **not** authorize an apply. Run a fresh reviewed plan and obtain explicit approval before a short-lived staging apply. Staging must then prove the tunnel, recovery path, and 2 GiB memory/load gate before any production promotion.
+Phase 1 evidence in `../DEVOPS_PHASE_1_ARCHITECTURE_AND_COST.md` is complete. The approved staging foundation was applied and verified on 2026-10-09; see `../DEVOPS_PHASE_1_COMPLETION_REPORT.md`. This is not a production authorization. Staging must still prove the tunnel, recovery path, immutable release/rollback, and 2 GiB memory/load gate before any production promotion. The default remains `t3a.small`; an AWS Free Tier account that rejects it may use the same-memory x86_64 `t3.small` fallback for this short-lived proof.
 
 ## State bootstrap and environments
 
-Terraform's production state must not remain local. `state-bootstrap/` is a one-time, separately reviewed stack that creates an encrypted, versioned S3 bucket with an S3 lockfile. Apply it using controlled administrator credentials only after the cost and account checks are approved. It is not invoked by CI.
+Terraform state must not remain local. `state-bootstrap/` is a one-time, separately reviewed stack that creates an encrypted, versioned S3 bucket with an S3 lockfile. The staging state backend has been bootstrapped; future environments must follow the same reviewed process. It is not invoked by CI.
 
 For each environment, copy `aws/backend.hcl.example` outside the repository, set its unique state key, then initialize with it:
 

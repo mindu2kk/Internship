@@ -66,6 +66,12 @@ data "aws_iam_policy_document" "origin_runtime" {
   }
 
   statement {
+    sid       = "ReadVerifiedBootstrapAssets"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.backup.arn}/bootstrap/*"]
+  }
+
+  statement {
     sid = "WriteBoundedApplicationLogs"
     actions = [
       "logs:CreateLogStream",

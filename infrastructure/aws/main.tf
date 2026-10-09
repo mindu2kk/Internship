@@ -274,6 +274,8 @@ resource "aws_instance" "origin" {
   iam_instance_profile        = aws_iam_instance_profile.origin.name
   user_data_replace_on_change = true
 
+  depends_on = [aws_iam_role_policy.origin_runtime]
+
   root_block_device {
     encrypted   = true
     volume_type = "gp3"

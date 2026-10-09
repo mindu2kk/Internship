@@ -45,12 +45,12 @@ variable "github_oidc_provider_arn" {
 
 variable "instance_type" {
   type        = string
-  description = "Selected x86_64 Release 1 candidate. Change only through a reviewed architecture decision and new cost gate."
+  description = "Selected x86_64 Release 1 candidate. t3.small is the same-memory fallback when a Free Tier account rejects t3a.small."
   default     = "t3a.small"
 
   validation {
-    condition     = var.instance_type == "t3a.small"
-    error_message = "Release 1 is intentionally pinned to t3a.small until an approved architecture change is made."
+    condition     = contains(["t3a.small", "t3.small"], var.instance_type)
+    error_message = "Release 1 permits only t3a.small or the same-memory x86_64 t3.small fallback."
   }
 }
 
