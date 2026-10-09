@@ -44,10 +44,13 @@ services:
   cloudflared:
     image: ${CLOUDFLARED_IMAGE:?Set a reviewed cloudflared image digest}
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?Set Cloudflare Tunnel token}
+    command: tunnel --no-autoupdate --edge-ip-version 6 --protocol http2 run --token ${CLOUDFLARE_TUNNEL_TOKEN:?Set Cloudflare Tunnel token}
     depends_on:
       api-proxy:
         condition: service_started
+    network_mode: host
+    extra_hosts:
+      - "api-proxy:127.0.0.1"
     logging:
       driver: awslogs
       options:
