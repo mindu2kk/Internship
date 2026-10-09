@@ -44,7 +44,23 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 systemctl enable --now docker
 
-echo '${cloudwatch_agent_config_b64}' | base64 --decode > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+fetch_bootstrap() {
+  local object_key="$1"
+  local destination="$2"
+  for attempt in {1..12}; do
+    if AWS_USE_DUALSTACK_ENDPOINT=true aws s3 cp \
+      "s3://${backup_bucket}/bootstrap/$object_key" "$destination" \
+      --region '${aws_region}' --only-show-errors; then
+      return 0
+    fi
+    sleep 10
+  done
+  echo "Unable to download verified bootstrap asset: $object_key" >&2
+  return 1
+}
+
+# Bootstrap artifact set: ${bootstrap_assets_sha256}
+fetch_bootstrap cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 chmod 0644 /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
   -a fetch-config -m ec2 -s \
@@ -70,11 +86,11 @@ ${runtime_secret_parameters}
 EOF
 chmod 0600 /etc/aura/runtime-secret-parameters
 
-echo '${compose_file_b64}' | base64 --decode > /srv/aura/docker-compose.aws.yml
-echo '${refresh_file_b64}' | base64 --decode > /usr/local/bin/aura-refresh
-echo '${backup_file_b64}' | base64 --decode > /usr/local/bin/aura-backup
-echo '${restore_file_b64}' | base64 --decode > /usr/local/bin/aura-restore
-echo '${rollback_file_b64}' | base64 --decode > /usr/local/bin/aura-rollback
+fetch_bootstrap docker-compose.aws.yml /srv/aura/docker-compose.aws.yml
+fetch_bootstrap aura-refresh /usr/local/bin/aura-refresh
+fetch_bootstrap aura-backup /usr/local/bin/aura-backup
+fetch_bootstrap aura-restore /usr/local/bin/aura-restore
+fetch_bootstrap aura-rollback /usr/local/bin/aura-rollback
 chmod 0700 /usr/local/bin/aura-refresh /usr/local/bin/aura-backup /usr/local/bin/aura-restore /usr/local/bin/aura-rollback
 
 cat > /etc/systemd/system/aura-backup.service <<'EOF'

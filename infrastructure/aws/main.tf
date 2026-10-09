@@ -30,6 +30,18 @@ locals {
     for environment_name, leaf_name in var.runtime_secret_parameter_names :
     environment_name => "${local.parameter_prefix}/${leaf_name}"
   }
+  bootstrap_assets = {
+    "aura-refresh"           = file("${path.module}/../../SourceCode/deploy/aws/refresh.sh")
+    "aura-backup"            = file("${path.module}/../../SourceCode/deploy/aws/backup.sh")
+    "aura-restore"           = file("${path.module}/../../SourceCode/deploy/aws/restore.sh")
+    "aura-rollback"          = file("${path.module}/../../SourceCode/deploy/aws/rollback.sh")
+    "docker-compose.aws.yml" = file("${path.module}/../../SourceCode/deploy/aws/docker-compose.aws.yml")
+    "cloudwatch-agent.json" = templatefile("${path.module}/templates/cloudwatch-agent.json.tftpl", {
+      aws_region  = var.aws_region
+      environment = var.environment
+    })
+  }
+  bootstrap_assets_sha256 = sha256(join("", [for key in sort(keys(local.bootstrap_assets)) : "${key}:${local.bootstrap_assets[key]}"]))
 }
 
 resource "aws_vpc" "this" {
@@ -224,6 +236,17 @@ resource "aws_cloudwatch_log_group" "app" {
   retention_in_days = 30
 }
 
+resource "aws_s3_object" "bootstrap_assets" {
+  for_each = local.bootstrap_assets
+
+  bucket                 = aws_s3_bucket.backup.id
+  key                    = "bootstrap/${each.key}"
+  content                = each.value
+  content_type           = each.key == "cloudwatch-agent.json" ? "application/json" : "text/plain"
+  server_side_encryption = "AES256"
+  etag                   = md5(each.value)
+}
+
 resource "aws_ssm_parameter" "backend_release" {
   name  = local.release_parameter_name
   type  = "String"
@@ -277,6 +300,7 @@ resource "aws_instance" "origin" {
   depends_on = [
     aws_iam_role_policy.origin_runtime,
     aws_iam_role_policy_attachment.origin_cloudwatch_agent,
+    aws_s3_object.bootstrap_assets,
   ]
 
   root_block_device {
@@ -307,16 +331,8 @@ resource "aws_instance" "origin" {
     cloudflared_image_parameter_name = aws_ssm_parameter.cloudflared_image.name
     cloudflare_tunnel_parameter_name = local.cloudflare_tunnel_parameter_name
     log_group_name                   = aws_cloudwatch_log_group.app.name
-    cloudwatch_agent_config_b64 = base64encode(templatefile("${path.module}/templates/cloudwatch-agent.json.tftpl", {
-      aws_region  = var.aws_region
-      environment = var.environment
-    }))
-    compose_file_b64          = base64encode(file("${path.module}/../../SourceCode/deploy/aws/docker-compose.aws.yml"))
-    refresh_file_b64          = base64encode(file("${path.module}/../../SourceCode/deploy/aws/refresh.sh"))
-    backup_file_b64           = base64encode(file("${path.module}/../../SourceCode/deploy/aws/backup.sh"))
-    restore_file_b64          = base64encode(file("${path.module}/../../SourceCode/deploy/aws/restore.sh"))
-    rollback_file_b64         = base64encode(file("${path.module}/../../SourceCode/deploy/aws/rollback.sh"))
-    runtime_secret_parameters = join("\n", [for environment_name, parameter_path in local.runtime_secret_parameter_paths : "${environment_name}=${parameter_path}"])
+    bootstrap_assets_sha256          = local.bootstrap_assets_sha256
+    runtime_secret_parameters        = join("\n", [for environment_name, parameter_path in local.runtime_secret_parameter_paths : "${environment_name}=${parameter_path}"])
   })
 
   lifecycle {
