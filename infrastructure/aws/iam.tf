@@ -19,6 +19,11 @@ resource "aws_iam_role_policy_attachment" "origin_ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+resource "aws_iam_role_policy_attachment" "origin_cloudwatch_agent" {
+  role       = aws_iam_role.origin.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
 data "aws_iam_policy_document" "origin_runtime" {
   statement {
     sid       = "EcrAuthorization"

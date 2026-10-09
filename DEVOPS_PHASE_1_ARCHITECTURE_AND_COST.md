@@ -1,6 +1,6 @@
 # AURA Phase 1 — AWS Architecture and Cost Gate
 
-**Status:** **Phase 1 design, cost gate, and staging infrastructure foundation complete.** `t3a.small` remains the costed x86_64 production candidate. Saved AWS Pricing Calculator estimates plus a bounded operational-services allowance produce USD 22.60 normal and USD 27.66 plausible-high, within the owner-approved USD 23 / USD 28 gate. On 2026-10-09, the AWS Free Tier account rejected `t3a.small`, so the staging foundation was applied with the approved same-memory x86_64 `t3.small` fallback. Application release and production deployment have not run.
+**Status:** **Phase 1 design, cost gate, and staging infrastructure foundation complete.** `t3a.small` remains the costed x86_64 production candidate. Saved AWS Pricing Calculator estimates plus a bounded operational-services allowance produce USD 22.60 normal and USD 27.66 plausible-high, within the original owner-approved USD 23 / USD 28 gate. On 2026-10-09, the AWS Free Tier account rejected `t3a.small`, so the staging foundation was applied with the approved same-memory x86_64 `t3.small` fallback. The owner subsequently approved a USD 50 monthly cap for observability and recovery work; Terraform enforces that newer ceiling. Application release and production deployment have not run.
 **Date:** 2026-09-30
 **Depends on:** `DEVOPS_PHASE_0_PRODUCTION_CONTRACT.md`
 

@@ -47,7 +47,7 @@ The estimates use on-demand pricing and do not deduct free-tier credits. Taxes a
 | AWS staging infrastructure | Applied: 34 Terraform-managed staging resources/state entries plus the separately managed five-resource state bootstrap. Final plan returned exit code 0 and `No changes`. |
 | EC2 security/runtime | The staging origin is running as `t3.small`; no public IPv4, zero ingress rules, IMDSv2 required, encrypted 20 GiB gp3 root volume, and SSM Online. Resource identifiers remain outside Git. |
 | Host bootstrap | Cloud-init completed; Docker 25 and Docker Compose v5.6.0 are active. The Compose binary matched the pinned SHA-256, and the deployment/backup scripts and daily backup timer were verified through SSM. |
-| Cost guardrail | AWS Budget cap is USD 28; the AWS forecast at verification time was USD 20.017. |
+| Cost guardrail | Terraform is configured to raise the AWS Budget cap to owner-approved USD 50 during the monitoring/recovery apply. The prior live forecast was USD 20.017; refresh the calculator and AWS forecast after apply. |
 | Application deployment | **Not run.** ECR repositories and release parameters are prepared, but application images, runtime secrets, Cloudflare Tunnel, and DNS cutover remain pending. |
 
 ## Remaining staging release gates

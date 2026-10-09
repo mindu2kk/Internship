@@ -274,7 +274,10 @@ resource "aws_instance" "origin" {
   iam_instance_profile        = aws_iam_instance_profile.origin.name
   user_data_replace_on_change = true
 
-  depends_on = [aws_iam_role_policy.origin_runtime]
+  depends_on = [
+    aws_iam_role_policy.origin_runtime,
+    aws_iam_role_policy_attachment.origin_cloudwatch_agent,
+  ]
 
   root_block_device {
     encrypted   = true
@@ -304,10 +307,16 @@ resource "aws_instance" "origin" {
     cloudflared_image_parameter_name = aws_ssm_parameter.cloudflared_image.name
     cloudflare_tunnel_parameter_name = local.cloudflare_tunnel_parameter_name
     log_group_name                   = aws_cloudwatch_log_group.app.name
-    compose_file_b64                 = base64encode(file("${path.module}/../../SourceCode/deploy/aws/docker-compose.aws.yml"))
-    refresh_file_b64                 = base64encode(file("${path.module}/../../SourceCode/deploy/aws/refresh.sh"))
-    backup_file_b64                  = base64encode(file("${path.module}/../../SourceCode/deploy/aws/backup.sh"))
-    runtime_secret_parameters        = join("\n", [for environment_name, parameter_path in local.runtime_secret_parameter_paths : "${environment_name}=${parameter_path}"])
+    cloudwatch_agent_config_b64 = base64encode(templatefile("${path.module}/templates/cloudwatch-agent.json.tftpl", {
+      aws_region  = var.aws_region
+      environment = var.environment
+    }))
+    compose_file_b64          = base64encode(file("${path.module}/../../SourceCode/deploy/aws/docker-compose.aws.yml"))
+    refresh_file_b64          = base64encode(file("${path.module}/../../SourceCode/deploy/aws/refresh.sh"))
+    backup_file_b64           = base64encode(file("${path.module}/../../SourceCode/deploy/aws/backup.sh"))
+    restore_file_b64          = base64encode(file("${path.module}/../../SourceCode/deploy/aws/restore.sh"))
+    rollback_file_b64         = base64encode(file("${path.module}/../../SourceCode/deploy/aws/rollback.sh"))
+    runtime_secret_parameters = join("\n", [for environment_name, parameter_path in local.runtime_secret_parameter_paths : "${environment_name}=${parameter_path}"])
   })
 
   lifecycle {
@@ -326,7 +335,7 @@ resource "aws_instance" "origin" {
 resource "aws_budgets_budget" "monthly" {
   name         = "${local.name_prefix}-monthly-cap"
   budget_type  = "COST"
-  limit_amount = "28"
+  limit_amount = "50"
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 

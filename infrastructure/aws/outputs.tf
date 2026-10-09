@@ -37,3 +37,11 @@ output "cloudflared_image_parameter" {
 output "cloudwatch_log_group" {
   value = aws_cloudwatch_log_group.app.name
 }
+
+output "operational_alert_topic_arn" {
+  value = aws_sns_topic.operational_alerts.arn
+}
+
+output "operations_dashboard_name" {
+  value = aws_cloudwatch_dashboard.staging.dashboard_name
+}

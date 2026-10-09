@@ -1,0 +1,84 @@
+name: AWS operational recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment. Production is protected by its GitHub Environment.
+        required: true
+        type: choice
+        options: [staging, production]
+      operation:
+        description: Run a verified backup or restore a retained immutable release snapshot.
+        required: true
+        type: choice
+        options: [backup, rollback]
+      rollback_snapshot:
+        description: Required only for rollback, for example release-YYYYMMDDTHHMMSSZ-<12hex>.env.
+        required: false
+        type: string
+      confirmation:
+        description: Type OPERATE to confirm the selected operation.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-operational-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  operate:
+    name: ${{ inputs.operation }} on ${{ inputs.environment }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      PROJECT: aura
+    steps:
+      - name: Validate the requested operation
+        run: |
+          test "${{ inputs.confirmation }}" = "OPERATE"
+          test -n "$AWS_REGION"
+          case "${{ inputs.operation }}" in
+            backup) ;;
+            rollback)
+              snapshot='${{ inputs.rollback_snapshot }}'
+              [[ "$snapshot" =~ ^release-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}\.env$ ]]
+              ;;
+            *) exit 1 ;;
+          esac
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Run the selected SSM operation on exactly one tagged origin
+        id: operation
+        run: |
+          instance_id="$(aws ec2 describe-instances \
+            --filters "Name=tag:Project,Values=$PROJECT" "Name=tag:Environment,Values=${{ inputs.environment }}" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)"
+          test -n "$instance_id"
+          test "$(wc -w <<< "$instance_id")" -eq 1
+
+          case "${{ inputs.operation }}" in
+            backup) command='sudo /usr/local/bin/aura-backup' ;;
+            rollback) command="sudo /usr/local/bin/aura-rollback ${{ inputs.rollback_snapshot }}" ;;
+          esac
+
+          command_id="$(aws ssm send-command \
+            --document-name AWS-RunShellScript \
+            --instance-ids "$instance_id" \
+            --parameters "commands=[\"$command\"]" \
+            --query 'Command.CommandId' --output text)"
+          echo "instance_id=$instance_id" >> "$GITHUB_OUTPUT"
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+      - name: Wait for the operation result
+        run: |
+          aws ssm wait command-executed --command-id "${{ steps.operation.outputs.command_id }}" --instance-id "${{ steps.operation.outputs.instance_id }}"
+          aws ssm get-command-invocation --command-id "${{ steps.operation.outputs.command_id }}" --instance-id "${{ steps.operation.outputs.instance_id }}" --output json

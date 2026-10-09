@@ -53,6 +53,8 @@ jobs:
         run: |
           bash -n SourceCode/deploy/aws/refresh.sh
           bash -n SourceCode/deploy/aws/backup.sh
+          bash -n SourceCode/deploy/aws/restore.sh
+          bash -n SourceCode/deploy/aws/rollback.sh
           if grep -rIU $'\r' infrastructure SourceCode/deploy/aws; then
             echo 'Linux bootstrap files must use LF line endings.' >&2
             exit 1

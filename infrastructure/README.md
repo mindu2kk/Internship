@@ -42,9 +42,24 @@ The Cloudflare named tunnel and its public hostname are owner-managed because th
 
 The release workflow writes only immutable backend/API-proxy ECR image references to the two non-secret SSM parameters created by Terraform. It runs only by manual dispatch, and its production job uses the GitHub `production` environment with required human approval.
 
+## Monitoring and recovery
+
+The staging origin publishes container logs to CloudWatch for 30 days. The
+CloudWatch Agent publishes root-disk and memory utilization, and Terraform
+creates CPU, instance-status, memory, and disk alarms plus a small operations
+dashboard. Alert delivery requires confirming the owner email subscription sent
+by SNS after apply.
+
+Daily backups include a SHA-256 sidecar and can be restored only from the
+configured S3 backup bucket. Each release retains a root-only immutable runtime
+snapshot for rollback. Use [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) to
+perform and record staging backup/restore and rollback drills; a drill is not
+passed merely because its scripts exist.
+
 ## Required operator checks
 
 1. Set `budget_alert_email` in a secure tfvars file. The plan intentionally fails without it.
 2. Create the owner-approved staging and production GitHub environments. Configure `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, `ECR_BACKEND_REPOSITORY`, `ECR_PROXY_REPOSITORY`, `SSM_BACKEND_RELEASE_PARAMETER`, `SSM_PROXY_RELEASE_PARAMETER`, and `PHASE_1_COST_GATE=approved` only after the cost gate passes. Keep production reviewer protection enabled.
-3. Run `terraform plan`; inspect only. A subsequent apply remains a separate cost-producing decision.
-4. When an instance exists, verify SSM, ECR dual-stack pull, S3 backup/restore, CloudWatch delivery, and the Cloudflare tunnel before DNS cutover.
+3. Confirm the SNS subscription email after Terraform creates the operational-alert topic.
+4. Run `terraform plan`; inspect only. A subsequent apply remains a separate cost-producing decision.
+5. When an instance exists, verify SSM, ECR dual-stack pull, S3 backup/restore, CloudWatch delivery, and the Cloudflare tunnel before DNS cutover.
