@@ -138,6 +138,7 @@ data "aws_iam_policy_document" "github_deployer" {
     sid = "PushOnlyReleaseImages"
     actions = [
       "ecr:BatchCheckLayerAvailability",
+      "ecr:BatchGetImage",
       "ecr:CompleteLayerUpload",
       "ecr:DescribeImages",
       "ecr:InitiateLayerUpload",
