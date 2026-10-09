@@ -167,27 +167,33 @@ data "aws_iam_policy_document" "github_deployer" {
   }
 
   statement {
-    sid = "DeployToTaggedOrigin"
-    actions = [
-      "ssm:SendCommand",
-      "ssm:GetCommandInvocation",
-    ]
-    resources = [
-      "arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript",
-      "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*",
-    ]
+    sid       = "UseAwsRunShellScript"
+    actions   = ["ssm:SendCommand"]
+    resources = ["arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript"]
+  }
+
+  statement {
+    sid       = "RunCommandOnTaggedOrigin"
+    actions   = ["ssm:SendCommand"]
+    resources = ["arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"]
 
     condition {
       test     = "StringEquals"
-      variable = "aws:ResourceTag/Project"
+      variable = "ssm:resourceTag/Project"
       values   = [var.project]
     }
 
     condition {
       test     = "StringEquals"
-      variable = "aws:ResourceTag/Environment"
+      variable = "ssm:resourceTag/Environment"
       values   = [var.environment]
     }
+  }
+
+  statement {
+    sid       = "ReadOriginCommandResult"
+    actions   = ["ssm:GetCommandInvocation"]
+    resources = ["*"]
   }
 
   statement {
