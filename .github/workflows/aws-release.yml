@@ -91,7 +91,9 @@ jobs:
           # user_data runs only on first boot. Sync the Terraform-managed
           # bootstrap artifacts on every immutable release so EC2 cannot keep
           # an obsolete GHCR-era refresh script or Compose definition.
-          remote_script="$(cat <<'EOF'
+          remote_command_file="$RUNNER_TEMP/aura-bootstrap-sync.sh"
+          remote_parameters_file="$RUNNER_TEMP/aura-bootstrap-sync-parameters.json"
+          cat > "$remote_command_file" <<'EOF'
           set -Eeuo pipefail
           source /etc/aura/deploy.env
           test -n "$AWS_REGION"
@@ -116,11 +118,11 @@ jobs:
 
           exec /usr/local/bin/aura-refresh
           EOF
-          )
+          jq -n --rawfile command "$remote_command_file" '{commands: [$command]}' > "$remote_parameters_file"
           command_id="$(aws ssm send-command \
             --document-name AWS-RunShellScript \
             --instance-ids "$instance_id" \
-            --parameters "$(jq -cn --arg command "$remote_script" '{commands: [$command]}')" \
+            --parameters "file://$remote_parameters_file" \
             --query 'Command.CommandId' --output text)"
           echo "instance_id=$instance_id" >> "$GITHUB_OUTPUT"
           echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
