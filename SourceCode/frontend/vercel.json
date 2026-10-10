@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:match*",
-      "destination": "https://internship-eewx.onrender.com/api/:match*"
+      "destination": "https://api-staging.adtgroup.com.vn/api/:match*"
     }
   ]
 }
