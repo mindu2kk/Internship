@@ -10,6 +10,8 @@ on:
       - SourceCode/deploy/nginx/api.conf
       - SourceCode/requirements.txt
       - .github/workflows/aws-validate.yml
+      - .github/workflows/aws-release.yml
+      - .github/workflows/aws-operations.yml
   push:
     branches: [main]
     paths:
@@ -20,6 +22,8 @@ on:
       - SourceCode/deploy/nginx/api.conf
       - SourceCode/requirements.txt
       - .github/workflows/aws-validate.yml
+      - .github/workflows/aws-release.yml
+      - .github/workflows/aws-operations.yml
   workflow_dispatch:
 
 permissions:
@@ -35,8 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.16.2
       - name: Format Terraform
@@ -85,10 +89,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
       - name: Build backend for the x86_64 architecture
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./SourceCode
           file: ./SourceCode/Dockerfile.backend

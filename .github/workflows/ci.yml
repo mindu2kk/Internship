@@ -22,8 +22,8 @@ jobs:
       run:
         working-directory: SourceCode
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: pip
@@ -41,7 +41,7 @@ jobs:
           tests/agent tests/verification/test_config_loader.py tests/test_unit.py
           --cov=backend --cov-report=term-missing --cov-report=xml -q
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: backend-coverage
           path: SourceCode/coverage.xml
@@ -55,8 +55,8 @@ jobs:
       run:
         working-directory: SourceCode/frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -75,24 +75,25 @@ jobs:
       FRONTEND_IMAGE: aura-frontend:ci
       HTTP_PORT: '8080'
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: ./SourceCode
           file: ./SourceCode/Dockerfile.backend
+          platforms: linux/amd64
           tags: aura-backend:ci
           load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      - uses: docker/build-push-action@v6
+          cache-from: type=gha,scope=x86_64-backend
+          cache-to: type=gha,mode=max,scope=x86_64-backend
+      - uses: docker/build-push-action@v7
         with:
           context: ./SourceCode
           file: ./SourceCode/Dockerfile.frontend
           tags: aura-frontend:ci
           load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=ci-frontend
+          cache-to: type=gha,mode=max,scope=ci-frontend
       - name: Start exact CI images
         run: docker compose -f SourceCode/docker-compose.production.yml up -d --wait
       - name: Smoke test public and API paths

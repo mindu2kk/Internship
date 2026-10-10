@@ -11,14 +11,17 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements first (layer caching)
 COPY requirements.txt .
-ENV PIP_DISABLE_PIP_VERSION_CHECK=1
-RUN pip install --no-cache-dir --retries 10 --timeout 300 -r requirements.txt
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_PREFER_BINARY=1
+# Prefer pre-built wheels so cold builds avoid source compilation when a compatible
+# wheel exists; the requirements layer remains reusable through Buildx GHA cache.
+RUN pip install --no-cache-dir --prefer-binary --retries 10 --timeout 300 -r requirements.txt
 
 # Copy application code
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p chroma_db logs
+RUN mkdir -p chroma_db logs runtime
 
 # Expose port
 EXPOSE 8000

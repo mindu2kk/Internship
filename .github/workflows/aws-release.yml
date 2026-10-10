@@ -45,32 +45,36 @@ jobs:
           test -n "$ECR_PROXY_REPOSITORY"
           test -n "$SSM_BACKEND_RELEASE_PARAMETER"
           test -n "$SSM_PROXY_RELEASE_PARAMETER"
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@v7
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
       - uses: aws-actions/amazon-ecr-login@v2
         id: ecr
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Build and publish immutable x86_64 backend image
         id: backend
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./SourceCode
           file: ./SourceCode/Dockerfile.backend
           platforms: linux/amd64
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPOSITORY }}:sha-${{ github.sha }}
+          cache-from: type=gha,scope=x86_64-backend
+          cache-to: type=gha,mode=max,scope=x86_64-backend
       - name: Build and publish immutable x86_64 API proxy image
         id: proxy
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./SourceCode
           file: ./SourceCode/Dockerfile.proxy
           platforms: linux/amd64
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_PROXY_REPOSITORY }}:sha-${{ github.sha }}
+          cache-from: type=gha,scope=x86_64-api-proxy
+          cache-to: type=gha,mode=max,scope=x86_64-api-proxy
       - name: Point SSM release parameters to exact image digests
         run: |
           aws ssm put-parameter --overwrite --type String \
