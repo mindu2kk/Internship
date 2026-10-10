@@ -57,11 +57,13 @@ variable "instance_type" {
 variable "root_volume_size_gib" {
   type        = number
   description = "Encrypted gp3 root/data capacity. The host binds /srv/aura/data into containers."
-  default     = 20
+  # The backend image is roughly 3.4 GiB. 40 GiB leaves working room for a
+  # candidate pull, the running release, Chroma data, logs, and a rollback.
+  default = 40
 
   validation {
-    condition     = var.root_volume_size_gib >= 20 && var.root_volume_size_gib <= 30
-    error_message = "root_volume_size_gib must remain within the approved 20-30 GiB cost envelope."
+    condition     = var.root_volume_size_gib >= 40 && var.root_volume_size_gib <= 50
+    error_message = "root_volume_size_gib must remain within the approved 40-50 GiB reliability envelope."
   }
 }
 

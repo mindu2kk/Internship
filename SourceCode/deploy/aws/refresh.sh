@@ -56,6 +56,18 @@ trap 'docker logout "$ecr_registry" >/dev/null 2>&1 || true' EXIT
 install -d -m 0700 /srv/aura/data/chroma /srv/aura/logs
 install -d -m 0700 "$AURA_RELEASES"
 
+# A candidate image must coexist briefly with the running release. Remove only
+# images that no running container references, then make the capacity contract
+# explicit before beginning a pull. A rollback can always repull its immutable
+# ECR digest from its retained release snapshot.
+docker image prune --all --force >/dev/null
+readonly MIN_FREE_KIB=$((8 * 1024 * 1024))
+available_kib="$(df --output=avail / | tail -n 1 | tr -d '[:space:]')"
+if [[ ! "$available_kib" =~ ^[0-9]+$ || "$available_kib" -lt "$MIN_FREE_KIB" ]]; then
+  echo "Insufficient root-disk capacity for an immutable release: ${available_kib:-unknown} KiB available; need at least ${MIN_FREE_KIB} KiB." >&2
+  exit 1
+fi
+
 cat > "$AURA_RUNTIME_ENV" <<EOF
 AWS_REGION=$AWS_REGION
 AURA_LOG_GROUP=$AURA_LOG_GROUP
