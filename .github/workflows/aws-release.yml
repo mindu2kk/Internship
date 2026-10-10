@@ -87,10 +87,40 @@ jobs:
             --query 'Reservations[].Instances[].InstanceId' --output text)"
           test -n "$instance_id"
           test "$(wc -w <<< "$instance_id")" -eq 1
+
+          # user_data runs only on first boot. Sync the Terraform-managed
+          # bootstrap artifacts on every immutable release so EC2 cannot keep
+          # an obsolete GHCR-era refresh script or Compose definition.
+          remote_script="$(cat <<'EOF'
+          set -Eeuo pipefail
+          source /etc/aura/deploy.env
+          test -n "$AWS_REGION"
+          test -n "$BACKUP_BUCKET"
+
+          sync_asset() {
+            local asset="$1"
+            local destination="$2"
+            AWS_USE_DUALSTACK_ENDPOINT=true aws s3 cp \
+              "s3://${BACKUP_BUCKET}/bootstrap/${asset}" "$destination" \
+              --region "$AWS_REGION" --only-show-errors
+          }
+
+          install -d -m 0750 /srv/aura /etc/aura
+          sync_asset docker-compose.aws.yml /srv/aura/docker-compose.aws.yml
+          sync_asset aura-refresh /usr/local/bin/aura-refresh
+          sync_asset aura-backup /usr/local/bin/aura-backup
+          sync_asset aura-restore /usr/local/bin/aura-restore
+          sync_asset aura-rollback /usr/local/bin/aura-rollback
+          chmod 0700 /usr/local/bin/aura-refresh /usr/local/bin/aura-backup \
+            /usr/local/bin/aura-restore /usr/local/bin/aura-rollback
+
+          exec /usr/local/bin/aura-refresh
+          EOF
+          )
           command_id="$(aws ssm send-command \
             --document-name AWS-RunShellScript \
             --instance-ids "$instance_id" \
-            --parameters 'commands=["sudo /usr/local/bin/aura-refresh"]' \
+            --parameters "$(jq -cn --arg command "$remote_script" '{commands: [$command]}')" \
             --query 'Command.CommandId' --output text)"
           echo "instance_id=$instance_id" >> "$GITHUB_OUTPUT"
           echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
